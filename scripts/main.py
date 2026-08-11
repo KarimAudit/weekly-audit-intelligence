@@ -114,13 +114,11 @@ class AuditIntelligenceAgent:
         today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         
         user_prompt = (
-            f"Date of Report: {today_str}\n\n"
-            f"Please research and analyze the latest developments, whitepapers, standards, "
-            f"and publications from the following target sources and domain areas:\n\n"
+            f"Date of Newsletter: {today_str}\n\n"
+            f"Target Authoritative Reference Sources & Topics:\n"
             f"{source_context}\n\n"
-            f"CRITICAL INSTRUCTION: Do NOT include any hyperlinks, URLs, or web links anywhere in the generated text. "
-            f"Present all information directly as professional editorial text. "
-            f"Ensure strict adherence to language requirements (English Executive Summary, Arabic Main Sections)."
+            f"Generate an engaging, highly practical executive newsletter following the exact structure and guidelines defined in your system prompt. "
+            f"Include real, functional hyperlinks to official reports and authoritative sources in the final section."
         )
 
         last_exception = None
@@ -132,7 +130,7 @@ class AuditIntelligenceAgent:
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=self.system_prompt,
-                        temperature=self.config.get("temperature", 0.2),
+                        temperature=self.config.get("temperature", 0.3),
                         top_p=self.config.get("top_p", 0.95),
                     ),
                 )
@@ -147,46 +145,32 @@ class AuditIntelligenceAgent:
             raise last_exception
         raise RuntimeError("Failed to generate report with available Gemini models.")
 
-    def strip_all_links(self, text: str) -> str:
-        """Completely strip URLs and Markdown hyperlink structures from text."""
-        # Convert Markdown links [Text](URL) to just "Text"
-        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-        # Strip plain URLs starting with http:// or https://
-        text = re.sub(r'https?://[^\s]+', '', text)
-        return text
-
     def save_artifacts(self, report_md: str) -> Path:
-        """Save clean report artifacts."""
+        """Save report artifacts as Markdown and DOCX."""
         reports_dir = self.base_dir / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         date_suffix = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
-        clean_text = self.strip_all_links(report_md)
-
-        # Markdown
+        # Save Markdown
         md_path = reports_dir / f"audit_intelligence_{date_suffix}.md"
         with open(md_path, "w", encoding="utf-8") as f:
-            f.write(clean_text)
+            f.write(report_md)
 
-        # Word Document (.docx)
+        # Save DOCX
         docx_path = reports_dir / f"audit_intelligence_{date_suffix}.docx"
         doc = Document()
-        doc.add_heading("Weekly Audit Intelligence Report", 0)
-        for paragraph in clean_text.split("\n\n"):
+        doc.add_heading("Audit Intelligence Weekly Briefing", 0)
+        for paragraph in report_md.split("\n\n"):
             if paragraph.strip():
                 doc.add_paragraph(paragraph.strip())
         doc.save(str(docx_path))
 
-        logger.info(f"Saved weekly report artifacts to {reports_dir}")
+        logger.info(f"Saved weekly newsletter artifacts to {reports_dir}")
         return docx_path
 
     def build_executive_newsletter_html(self, report_md: str) -> str:
-        """Construct a McKinsey/EY styled HTML email layout with zero external links."""
-        clean_text = self.strip_all_links(report_md)
-        
-        # Convert markdown text to valid HTML elements
-        html_content = markdown.markdown(clean_text, extensions=['tables', 'fenced_code'])
-        
+        """Construct an executive newsletter HTML email layout with styled links."""
+        html_content = markdown.markdown(report_md, extensions=['tables', 'fenced_code'])
         date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%B %d, %Y")
 
         return f"""
@@ -197,78 +181,70 @@ class AuditIntelligenceAgent:
             <style>
                 body {{
                     font-family: 'Georgia', 'Times New Roman', serif;
-                    background-color: #f8f9fa;
+                    background-color: #f4f6f9;
                     color: #222222;
                     margin: 0;
                     padding: 0;
-                    -webkit-font-smoothing: antialiased;
                 }}
                 .email-wrapper {{
                     max-width: 680px;
                     margin: 30px auto;
                     background: #ffffff;
                     border: 1px solid #e2e8f0;
-                    border-radius: 4px;
+                    border-radius: 6px;
                     overflow: hidden;
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
                 }}
                 .email-header {{
-                    background-color: #00205b; /* Executive Navy Blue */
+                    background-color: #0f172a; /* Slate Navy */
                     color: #ffffff;
                     padding: 35px 40px;
-                    border-bottom: 4px solid #c59b27; /* Gold accent line */
+                    border-bottom: 4px solid #3b82f6; /* Accent Blue */
                 }}
                 .email-header h1 {{
                     font-family: 'Georgia', serif;
                     font-size: 26px;
                     font-weight: normal;
                     margin: 0 0 8px 0;
-                    letter-spacing: 0.5px;
                 }}
                 .email-header .sub-header {{
                     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
                     font-size: 13px;
                     text-transform: uppercase;
                     letter-spacing: 1.5px;
-                    color: #cbd5e1;
+                    color: #94a3b8;
                     margin: 0;
                 }}
                 .email-body {{
                     padding: 40px;
                     font-size: 16px;
                     line-height: 1.8;
-                    color: #2d3748;
+                    color: #334155;
                 }}
                 .email-body h1, .email-body h2, .email-body h3 {{
                     font-family: 'Georgia', serif;
-                    color: #00205b;
+                    color: #0f172a;
                     margin-top: 30px;
                     margin-bottom: 12px;
                     font-weight: 600;
                 }}
-                .email-body h1 {{ font-size: 22px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }}
+                .email-body h1 {{ font-size: 22px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; }}
                 .email-body h2 {{ font-size: 19px; }}
-                .email-body h3 {{ font-size: 17px; }}
-                .email-body p {{
-                    margin-bottom: 18px;
-                }}
-                .email-body ul, .email-body ol {{
-                    margin-bottom: 20px;
-                    padding-left: 24px;
-                }}
-                .email-body li {{
-                    margin-bottom: 8px;
+                .email-body a {{
+                    color: #2563eb;
+                    text-decoration: underline;
+                    font-weight: 500;
                 }}
                 .email-body blockquote {{
                     margin: 24px 0;
                     padding: 16px 20px;
-                    background-color: #f7fafc;
-                    border-left: 4px solid #00205b;
+                    background-color: #f8fafc;
+                    border-left: 4px solid #3b82f6;
                     font-style: italic;
-                    color: #4a5568;
+                    color: #475569;
                 }}
                 .email-footer {{
-                    background-color: #f1f5f9;
+                    background-color: #f8fafc;
                     padding: 24px 40px;
                     border-top: 1px solid #e2e8f0;
                     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -288,7 +264,7 @@ class AuditIntelligenceAgent:
                     {html_content}
                 </div>
                 <div class="email-footer">
-                    Confidential &bull; Generated for Internal Audit Leadership
+                    Confidential &bull; Prepared for Internal Audit Leadership
                 </div>
             </div>
         </body>
@@ -296,16 +272,17 @@ class AuditIntelligenceAgent:
         """
 
     def send_email(self, report_md: str, docx_path: Path) -> None:
-        """Send formatted executive email with word document attachment and zero links."""
+        """Send formatted newsletter email with docx attachment and active links."""
         smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
         smtp_port = int(os.environ.get("SMTP_PORT", "587"))
         smtp_user = os.environ.get("SMTP_USER")
         smtp_password = os.environ.get("SMTP_PASSWORD")
 
-        recipients = self.config.get("email_recipients", [
-            "andro.ios.developer@gmail.com",
-            "karimbenkarim@yahoo.fr"
-        ])
+        recipients = self.config.get("email_recipients", [])
+
+        if not recipients:
+            logger.warning("No email recipients configured in settings.json. Skipping dispatch.")
+            return
 
         if not smtp_user or not smtp_password:
             logger.warning("SMTP credentials missing. Skipping email delivery.")
@@ -331,7 +308,7 @@ class AuditIntelligenceAgent:
             msg.attach(part)
 
         try:
-            logger.info(f"Dispatching executive newsletter to: {', '.join(recipients)}...")
+            logger.info(f"Dispatching executive newsletter to {len(recipients)} recipients...")
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(smtp_user, smtp_password)
