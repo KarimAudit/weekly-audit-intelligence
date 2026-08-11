@@ -1,0 +1,23 @@
+name: Weekly Audit Intelligence
+
+on:
+  schedule:
+    # Every Monday at 05:00 UTC
+    - cron: "0 5 * * 1"
+
+  workflow_dispatch:
+
+jobs:
+  audit-intelligence:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify workflow
+        run: |
+          echo "====================================="
+          echo "Audit Intelligence Agent Started"
+          echo "Repository checked out successfully."
+          echo "====================================="
