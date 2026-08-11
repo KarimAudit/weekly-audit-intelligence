@@ -8,7 +8,7 @@
     "karimbenkarim@yahoo.fr",
     "karim.sliti@sab.gov.qa"
   ],
-  "model_name": "gemini-2.0-flash",
+  "model_name": "gemini-3.5-flash",
   "max_articles": 25,
   "max_summary_words": 1200,
   "language": "Arabic",
