@@ -1,23 +1,38 @@
-name: Weekly Audit Intelligence
+name: Weekly Audit Intelligence Report
 
 on:
   schedule:
-    # Every Monday at 05:00 UTC
-    - cron: "0 5 * * 1"
-
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 jobs:
-  audit-intelligence:
+  generate-report:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify workflow
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          echo "====================================="
-          echo "Audit Intelligence Agent Started"
-          echo "Repository checked out successfully."
-          echo "====================================="
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Audit Intelligence Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python scripts/main.py
+
+      - name: Commit and push generated report
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          git commit -m "Automated Weekly Report - $(date +'%Y-%m-%d')" || exit 0
+          git push
