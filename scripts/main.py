@@ -9,6 +9,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import smtplib
 import sys
 import urllib.request
@@ -71,7 +72,7 @@ class AuditIntelligenceAgent:
             raise
 
     def _load_sources(self, filepath: Path) -> List[str]:
-        """Load source URLs from a line-separated text file."""
+        """Load source entries from a line-separated text file."""
         if not filepath.exists():
             logger.warning(f"Sources file not found at {filepath}. Using defaults from config.")
             return self.config.get("default_sources", [])
@@ -89,18 +90,27 @@ class AuditIntelligenceAgent:
         logger.info("Gathering source references and contextual metadata...")
         context_blocks = []
         
-        for url in self.sources:
+        for entry in self.sources:
+            # Extract actual HTTP/HTTPS URL from entry if descriptive text exists
+            url_match = re.search(r"https?://[^\s]+", entry)
+            target_url = url_match.group(0) if url_match else None
+
+            if not target_url:
+                logger.warning(f"No valid URL found in entry: '{entry}'. Including raw text.")
+                context_blocks.append(f"Source Reference: {entry}")
+                continue
+
             try:
                 req = urllib.request.Request(
-                    url, 
+                    target_url, 
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
                 )
                 with urllib.request.urlopen(req, timeout=5) as response:
                     status = response.status
-                    context_blocks.append(f"Source URL: {url} (Status: {status})")
+                    context_blocks.append(f"Source URL: {target_url} (Status: {status})")
             except Exception as e:
-                logger.warning(f"Unable to directly reach {url}: {e}. Including URL as text reference.")
-                context_blocks.append(f"Source URL: {url} (Reference only)")
+                logger.warning(f"Unable to directly reach {target_url}: {e}. Including URL as text reference.")
+                context_blocks.append(f"Source URL: {target_url} (Reference only)")
 
         aggregated_context = "\n".join(context_blocks)
         return f"Target Authoritative Reference Sources:\n{aggregated_context}"
@@ -109,7 +119,8 @@ class AuditIntelligenceAgent:
         """Call Gemini API using official google-genai SDK to produce the intelligence report."""
         logger.info("Requesting report generation from Gemini API...")
         
-        model_name = self.config.get("model_name", "gemini-2.5-flash")
+        # Use supported stable production model name
+        model_name = self.config.get("model_name", "gemini-2.0-flash")
         today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         
         user_prompt = (
