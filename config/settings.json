@@ -1,0 +1,16 @@
+{
+  "project_name": "Audit Intelligence Agent",
+  "version": "1.0",
+  "report_day": "Monday",
+  "report_time_utc": "05:00",
+  "email_recipients": [
+    "andro.ios.developer@gmail.com",
+    "karimbenkarim@yahoo.fr",
+    "karim.sliti@sab.gov.qa"
+  ],
+  "max_articles": 25,
+  "max_summary_words": 1200,
+  "language": "Arabic",
+  "save_reports": true,
+  "report_format": "markdown"
+}
