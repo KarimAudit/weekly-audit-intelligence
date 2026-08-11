@@ -84,7 +84,7 @@ class AuditIntelligenceAgent:
                     sources.append(line)
         return sources
 
-def gather_source_context(self) -> str:
+    def gather_source_context(self) -> str:
         """Fetch content metadata or content summaries from configured authoritative sources."""
         logger.info("Gathering source references and contextual metadata...")
         context_blocks = []
@@ -95,7 +95,6 @@ def gather_source_context(self) -> str:
                     url, 
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
                 )
-                # Reduced socket timeout to prevent long network hangs
                 with urllib.request.urlopen(req, timeout=5) as response:
                     status = response.status
                     context_blocks.append(f"Source URL: {url} (Status: {status})")
@@ -105,12 +104,12 @@ def gather_source_context(self) -> str:
 
         aggregated_context = "\n".join(context_blocks)
         return f"Target Authoritative Reference Sources:\n{aggregated_context}"
+
     def generate_report(self, source_context: str) -> str:
         """Call Gemini API using official google-genai SDK to produce the intelligence report."""
         logger.info("Requesting report generation from Gemini API...")
         
         model_name = self.config.get("model_name", "gemini-2.5-flash")
-        
         today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         
         user_prompt = (
@@ -179,16 +178,13 @@ def gather_source_context(self) -> str:
         date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         subject = f"Weekly Audit Intelligence Report - {date_str}"
 
-        # Construct email with HTML rendering for RTL text support
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = smtp_user
         msg["To"] = ", ".join(recipients)
 
-        # Plain text version
         msg.attach(MIMEText(report_md, "plain", "utf-8"))
 
-        # Basic HTML wrapper supporting Arabic RTL reading
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -217,7 +213,6 @@ def gather_source_context(self) -> str:
             logger.info(f"Email successfully dispatched to: {', '.join(recipients)}")
         except Exception as e:
             logger.error(f"Failed to send email via SMTP: {e}")
-            # Non-fatal error; report is already stored in repository artifacts
 
     def run(self) -> None:
         """Execute the end-to-end pipeline."""
