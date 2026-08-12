@@ -1,6 +1,10 @@
 import os
 import json
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from datetime import datetime
 from typing import List, Dict, Any
 
@@ -16,7 +20,7 @@ from docx.oxml.ns import nsdecls, qn
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Corporate Palette (McKinsey / Big-4 Inspired)
-NAVY_PRIMARY = "743089"     # Dark Header Fill
+NAVY_PRIMARY = "B734F7"     # Dark Header Fill
 ACCENT_BLUE  = "B12763"     # Secondary Highlight / Borders
 GOLD_ACCENT  = "D4AF37"     # Premium Highlight
 BG_LIGHT     = "F8FAFC"     # Callout & Dashboard Fill
@@ -57,7 +61,6 @@ def add_executive_dashboard(doc, blocks: List[Dict[str, Any]]):
     critical_high = sum(1 for b in blocks if b.get("risk_level") in ["حرج", "عالٍ"])
     categories = list(set(b.get("category", "عام") for b in blocks))
     
-    # Header Row
     headers = ["إجمالي التحديثات", "تحديثات عالية الخطورة", "المجالات المغطاة"]
     for i, h in enumerate(headers):
         cell = tbl.cell(0, i)
@@ -71,7 +74,6 @@ def add_executive_dashboard(doc, blocks: List[Dict[str, Any]]):
         run.font.size = Pt(11)
         run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
-    # Data Row
     values = [str(total_items), str(critical_high), ", ".join(categories[:2])]
     for i, v in enumerate(values):
         cell = tbl.cell(1, i)
@@ -98,19 +100,17 @@ def create_section_header(doc, title: str, risk: str = "متوسط", category: s
     p = cell.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    # Title Text
     run_t = p.add_run(f"{title}  ")
     run_t.font.name = "Traditional Arabic"
     run_t.font.bold = True
     run_t.font.size = Pt(15)
     run_t.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
     
-    # Tag Metadata
     run_tag = p.add_run(f" [{category} | مستوى الخطورة: {risk}]")
     run_tag.font.name = "Traditional Arabic"
     run_tag.font.size = Pt(11)
     run_tag.font.bold = True
-    run_tag.font.color.rgb = RGBColor(0xD4, 0xAF, 0x37)  # Gold Accent
+    run_tag.font.color.rgb = RGBColor(0xD4, 0xAF, 0x37)
 
 def add_action_box(doc, why_it_matters: str, recommended_actions: str):
     """Creates a structured callout box for business impact and audit actions."""
@@ -119,7 +119,6 @@ def add_action_box(doc, why_it_matters: str, recommended_actions: str):
     cell = tbl.cell(0, 0)
     set_cell_background(cell, BG_LIGHT)
     
-    # Border XML: Thick Accent Right Border
     tcPr = cell._tc.get_or_add_tcPr()
     borders = parse_xml(
         f'<w:tcBorders {nsdecls("w")}>'
@@ -136,7 +135,6 @@ def add_action_box(doc, why_it_matters: str, recommended_actions: str):
     p.paragraph_format.line_spacing = 1.25
     p.paragraph_format.space_after = Pt(4)
     
-    # Why It Matters Section
     r1 = p.add_run("🎯 الأثر المباشر على المؤسسة (Why It Matters):\n")
     r1.font.name = "Traditional Arabic"
     r1.font.bold = True
@@ -148,7 +146,6 @@ def add_action_box(doc, why_it_matters: str, recommended_actions: str):
     r2.font.size = Pt(11.5)
     r2.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
     
-    # Recommended Action Steps
     r3 = p.add_run("🛠️ إجراءات التدقيق والحوكمة الموصى بها:\n")
     r3.font.name = "Traditional Arabic"
     r3.font.bold = True
@@ -160,18 +157,19 @@ def add_action_box(doc, why_it_matters: str, recommended_actions: str):
     r4.font.size = Pt(11.5)
     r4.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
 
-def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "Governance_Weekly_Brief.docx"):
-    """Builds a complete corporate Word document."""
+def build_word_document(content_blocks: List[Dict[str, Any]], reports_dir: str = "reports") -> str:
+    """Builds a corporate Word document inside the designated reports directory."""
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    filename = os.path.join(reports_dir, f"Governance_Weekly_Brief_{datetime.now().strftime('%Y-%m-%d')}.docx")
     doc = Document()
     
-    # Set Standard Page Margins (0.8 in)
     for section in doc.sections:
         section.top_margin = Inches(0.8)
         section.bottom_margin = Inches(0.8)
         section.left_margin = Inches(0.8)
         section.right_margin = Inches(0.8)
         
-        # Add Footer with Page Numbering Concept
         footer = section.footer
         f_p = footer.paragraphs[0]
         f_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -180,7 +178,6 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
         f_run.font.size = Pt(9)
         f_run.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
         
-    # Document Main Title
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = p_title.add_run("النشرة الاستراتيجية للحوكمة والتدقيق الداخلي")
@@ -189,7 +186,6 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
     run_title.font.bold = True
     run_title.font.color.rgb = RGBColor(0x00, 0x2B, 0x49)
     
-    # Date Subtitle
     p_sub = doc.add_paragraph()
     p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_sub = p_sub.add_run(f"تقرير رصد التحليلات والتطورات التنظيمية — {datetime.now().strftime('%Y-%m-%d')}")
@@ -198,10 +194,8 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
     run_sub.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
     
-    # Add Executive Dashboard Box
     add_executive_dashboard(doc, content_blocks)
     
-    # Content Iteration
     for block in content_blocks:
         create_section_header(
             doc, 
@@ -210,7 +204,6 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
             category=block.get("category", "حوكمة")
         )
         
-        # Summary Text
         p_body = doc.add_paragraph()
         p_body.paragraph_format.line_spacing = 1.3
         p_body.paragraph_format.space_after = Pt(6)
@@ -220,7 +213,6 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
         run_b.font.size = Pt(12.5)
         run_b.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
         
-        # Action Box
         add_action_box(
             doc, 
             why_it_matters=block.get("why_it_matters", ""), 
@@ -230,7 +222,8 @@ def build_word_document(content_blocks: List[Dict[str, Any]], filename: str = "G
         doc.add_paragraph().paragraph_format.space_after = Pt(10)
         
     doc.save(filename)
-    logging.info(f"Generated Word document successfully: {filename}")
+    logging.info(f"Generated Word document in reports folder: {filename}")
+    return filename
 
 def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
     """Generates a responsive high-contrast HTML Email."""
@@ -241,7 +234,6 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
         
         cards_html += f"""
         <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.03);">
-            <!-- High Contrast Title Bar -->
             <div style="background-color: #{NAVY_PRIMARY}; padding: 14px 18px; text-align: right; display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="color: #{TEXT_WHITE}; margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 16px; font-weight: bold;">
                     {block.get('title', '')}
@@ -250,14 +242,10 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
                     {risk}
                 </span>
             </div>
-            
-            <!-- Body Content -->
             <div style="padding: 18px; text-align: right; font-family: 'Segoe UI', Tahoma, sans-serif;">
                 <p style="color: #{TEXT_DARK}; font-size: 14.5px; line-height: 1.7; margin-top: 0; margin-bottom: 14px;">
                     {block.get('summary', '')}
                 </p>
-                
-                <!-- Action Callout Box -->
                 <div style="background-color: #{BG_LIGHT}; border-right: 4px solid #{ACCENT_BLUE}; padding: 14px 16px; border-radius: 4px;">
                     <div style="margin-bottom: 8px;">
                         <strong style="color: #{ACCENT_BLUE}; font-size: 13.5px;">🎯 الأثر المباشر (Why it Matters):</strong>
@@ -281,7 +269,6 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
     </head>
     <body style="background-color: #f1f5f9; margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, sans-serif;">
         <div style="max-width: 680px; margin: 0 auto;">
-            <!-- Header Banner -->
             <div style="background: linear-gradient(135deg, #{NAVY_PRIMARY} 0%, #004070 100%); padding: 28px 20px; border-radius: 8px 8px 0 0; text-align: center;">
                 <h1 style="color: #ffffff; margin: 0; font-size: 21px; font-weight: bold;">
                     النشرة الاستراتيجية للحوكمة والتدقيق الداخلي
@@ -290,13 +277,9 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
                     رصد التحليلات والتطورات التنظيمية — {datetime.now().strftime('%Y-%m-%d')}
                 </p>
             </div>
-
-            <!-- Content Cards -->
             <div style="padding: 20px 0;">
                 {cards_html}
             </div>
-
-            <!-- Footer -->
             <div style="text-align: center; padding: 15px; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
                 هذه النشرة مُعدّة آلياً عبر نظام رصد الرؤى والتطورات التنظيمية للحوكمة والتدقيق.<br>
                 جميع الحقوق محفوظة © {datetime.now().year}
@@ -306,8 +289,43 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
     </html>
     """
 
-if __name__ == "__main__":
-    # Test dataset matching updated schema
+def send_email_report(html_content: str, docx_path: str):
+    """Sends the HTML report along with the docx attachment via SMTP."""
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 465))
+    sender_email = os.getenv("SENDER_EMAIL")
+    sender_password = os.getenv("SENDER_PASSWORD")
+    recipient_emails = os.getenv("RECIPIENT_EMAILS", "").split(",")
+
+    if not sender_email or not sender_password or not recipient_emails or not recipient_emails[0]:
+        logging.warning("SMTP environment variables missing. Email was not sent automatically.")
+        return
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"النشرة الاستراتيجية للحوكمة والتدقيق الداخلي — {datetime.now().strftime('%Y-%m-%d')}"
+    msg["From"] = sender_email
+    msg["To"] = ", ".join(recipient_emails)
+
+    # Attach HTML Body
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    # Attach Docx Document
+    if os.path.exists(docx_path):
+        with open(docx_path, "rb") as f:
+            attachment = MIMEApplication(f.read(), _subtype="docx")
+            attachment.add_header("Content-Disposition", "attachment", filename=os.path.basename(docx_path))
+            msg.attach(attachment)
+
+    try:
+        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, recipient_emails, msg.as_string())
+        logging.info("Email newsletter successfully sent to recipients.")
+    except Exception as e:
+        logging.error(f"Failed to dispatch email report: {str(e)}")
+
+def run_pipeline():
+    """Main pipeline entry point."""
     sample_data = [
         {
             "title": "1. تحديثات معايير التدقيق القائم على إدارة المخاطر (ERM)",
@@ -327,9 +345,18 @@ if __name__ == "__main__":
         }
     ]
 
-    build_word_document(sample_data)
+    # 1. Build Word Report in 'reports' folder
+    docx_filepath = build_word_document(sample_data, reports_dir="reports")
     
+    # 2. Build HTML Content
+    email_html = generate_email_html(sample_data)
+    
+    # 3. Save preview file locally
     with open("email_preview.html", "w", encoding="utf-8") as f:
-        f.write(generate_email_html(sample_data))
+        f.write(email_html)
         
-    logging.info("Pipeline test execution successful.")
+    # 4. Dispatch Email with Attachment
+    send_email_report(email_html, docx_filepath)
+
+if __name__ == "__main__":
+    run_pipeline()
