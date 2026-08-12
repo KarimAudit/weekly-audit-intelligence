@@ -1,108 +1,108 @@
 # Executive Summary
 
-This week’s audit and governance landscape is dominated by three critical developments that demand the immediate attention of Chief Audit Executives (CAEs) and risk leaders:
+**التاريخ: 12 أغسطس 2026**
 
-1. **The Quality Assessment Review (QAR) Surge under the New IIA Standards**: With the Global Internal Audit Standards now fully active, organizations are facing their first wave of external quality assessments under the revised framework. The focus has shifted from mere checklist compliance to demonstrating tangible organizational impact and robust board-level relationships.
-2. **OECD and World Bank Public Integrity Push**: New joint initiatives emphasize the integration of real-time data analytics in public procurement to combat fraud and corruption, signaling a shift from retrospective auditing to continuous, proactive monitoring.
-3. **COSO’s Expanded Focus on Sustainability and AI Controls**: COSO’s updated guidance on Internal Control over Sustainability Reporting (ICSR) and emerging AI governance frameworks are forcing internal control teams to bridge the gap between financial controls and non-financial operational data.
+أهلاً بكم في العدد الأسبوعي من **"نشرة استخبارات التدقيق والرقابة" (Audit Intelligence Weekly)**، الموجهة خصيصاً لقادة التدقيق الداخلي، ومديري المخاطر، وأعضاء لجان المراجعة في الشرق الأوسط والعالم. نركز هذا الأسبوع على ثلاثة تطورات جوهرية تعيد تشكيل مشهد الحوكمة والرقابة:
 
-**So What?** Audit leaders can no longer rely on traditional, cycle-based audit plans. The convergence of strict regulatory standards, AI integration, and non-financial reporting mandates requires an agile, tech-enabled, and strategically aligned audit function.
+1. ⚡ **الدخول الكامل حيز التنفيذ لمعايير التدقيق الداخلي العالمية الجديدة (IIA Global Internal Audit Standards):** مع انتصاف عام 2026، تواجه الإدارات الرقابية ضغوطاً متزايدة لإثبات الامتثال الكامل للمبادئ الجديدة، لا سيما ما يتعلق بتقييم الأداء الخارجي وحوكمة تكنولوجيا المعلومات.
+2. 📊 **التحول نحو الرقابة المستمرة القائمة على البيانات (Continuous Controls Monitoring - CCM):** تزايد اعتماد المؤسسات الرائدة على تقنيات التحليل الفوري للبيانات للحد من مخاطر الاحتيال المالي والتشغيلي، مما يقلل الاعتماد على عينات التدقيق التقليدية بأثر رجعي.
+3. ⚖️ **تشديد الرقابة التنظيمية على حوكمة الذكاء الاصطناعي (AI Governance):** لم يعد التدقيق في الذكاء الاصطناعي خياراً ترفياً؛ حيث بدأت الجهات التنظيمية بفرض غرامات صارمة على المؤسسات التي تفتقر إلى أطر واضحة لإدارة مخاطر الخوارزميات والتحيز وحماية البيانات.
 
 ---
 
 # Internal Audit
 
-### 💡 Practical Quick Wins & Tactical Advice
-*   **The 15-Minute Charter Gap Analysis**: Immediately review your Internal Audit Charter against **Domain III (Governing the Internal Audit Function)** of the new Global Internal Audit Standards. Specifically, verify if the charter explicitly defines the board’s role in approving the audit plan, resource allocation, and the performance evaluation of the CAE.
-*   **Audit Plan Stress-Test**: Assess your current 2026 audit plan. If more than 70% of your resources are allocated to routine compliance audits, reallocate at least 15% to "emerging risk advisory" projects, specifically focusing on third-party digital dependencies.
+### 💡 خطوات عملية سريعة وتدابير تكتيكية (Practical Quick Wins)
 
-### 🇸🇦 التوجيه الاستراتيجي وتطبيق المعايير (Strategic Guidance & Standards Implementation)
-تطلب المعايير العالمية الجديدة للتدقيق الداخلي تحولاً جذرياً في طريقة قياس أداء الإدارة. لم يعد التقييم يقتصر على إنهاء خطة التدقيق السنوية، بل أصبح يركز على مدى القيمة المضافة والأثر الفعلي على بيئة الرقابة والمخاطر.
+لضمان مواكبة التطورات الأخيرة في مهنة التدقيق الداخلي، نوصي مديري التدقيق (CAEs) بتطبيق الخطوات التالية فوراً في خططهم الحالية:
 
-*   **نصيحة عملية (Practical Tip)**: يُنصح بتنظيم ورشة عمل مشتركة مع لجنة التدقيق والمراجعة لتحديد "مؤشرات الأداء الرئيسية" (KPIs) الجديدة للتدقيق الداخلي، بما يتماشى مع متطلبات الجمعية السعودية للمراجعين الداخليين (IIA KSA) والمعايير الدولية الحديثة.
+*   **إجراء تحليل الفجوات الشامل (Gap Analysis):** مقارنة المنهجية الحالية للتدقيق الداخلي مع المعايير العالمية الجديدة الصادرة عن المعهد الدولي للمدققين الداخليين (IIA Standards). ركز على "المجال الخامس" (Domain V) المتعلق بجودة أداء أعمال التدقيق.
+*   **التحول إلى التقييم الديناميكي للمخاطر (Dynamic Risk Assessment):** استبدال خطة التدقيق السنوية الجامدة بـ "خطة تدقيق مرنة" يتم تحديثها ربع سنويًا بناءً على تغير بيئة المخاطر ومؤشرات الأداء الرئيسية.
+*   **تطوير مصفوفة مهارات الفريق (Skills Matrix):** تقييم قدرات فريق التدقيق في مجالات تحليل البيانات الضخمة، والأمن السيبراني، وحوكمة الذكاء الاصطناعي، ووضع خطة تدريبية عاجلة لسد الثغرات المعرفية.
 
 ---
 
 # Internal Controls
 
-### 🕰️ Best Practice Flashback: COSO Principle 11
-COSO Principle 11 states that the organization selects and develops general control activities over technology to support the achievement of objectives. 
+### 🕰️ تذكير بأفضل الممارسات: إطار (COSO) والرقابة على التكنولوجيا
 
-In today's environment, this classic principle must be adapted to govern **Autonomous AI Agents** and **Robotic Process Automation (RPA)**. General IT controls (GITCs) must now evaluate:
-*   **Model Drift and Input Validation**: How inputs to automated decision-making models are controlled.
-*   **Algorithmic Segregation of Duties (SoD)**: Ensuring that a single automated agent does not initiate, approve, and execute financial transactions without human-in-the-loop thresholds.
+في ظل تسارع التحول الرقمي، نعود إلى المبدأ رقم 11 من مبادئ إطار (COSO) للرقابة الداخلية، والذي ينص على: *"اختيار وتطوير أنشطة رقابية عامة على التكنولوجيا لدعم تحقيق الأهداف"*.
 
-### 🇸🇦 تعزيز الرقابة الداخلية (Strengthening Internal Controls)
-تطبيق مبادئ COSO في العصر الرقمي يتطلب تجاوز الرقابة التقليدية. يجب على مسؤولي الرقابة الداخلية التركيز على أدوات الرقابة الوقائية التلقائية (Automated Preventive Controls) بدلاً من الرقابة الكاشفة (Detective Controls).
+*   **الربط بالواقع الحديث:** لم يعد كافياً مراجعة صلاحيات المستخدمين التقليدية (User Access Reviews). يجب على المدققين اليوم تقييم الضوابط الرقابية المحيطة ببيئات الحوسبة السحابية (Cloud Environments) وخطوط نقل البيانات الآلية (Data Pipelines).
+*   **الرقابة على التقارير غير المالية (ICSR):** تطبيق مبادئ (COSO) على تقارير الاستدامة والحوكمة البيئية والاجتماعية والمؤسسية (ESG) لضمان دقة البيانات المصدرة للجهات التنظيمية والمستثمرين، وتجنب مخاطر "الغسل الأخضر" (Greenwashing).
 
 ---
 
 # Governance
 
-The OECD’s updated Corporate Governance Principles place a heavy emphasis on board oversight of digital transformation and sustainability disclosures. Boards are now expected to treat cyber resilience and AI ethics not merely as IT issues, but as core fiduciary duties.
+### 🛡️ تعزيز دور لجنة المراجعة ومجلس الإدارة
 
-### Key Governance Actions for Audit Committees:
-*   **Establish Digital Literacy Baselines**: Ensure the Audit Committee has at least one member with deep, verifiable expertise in digital technology or cybersecurity.
-*   **Formalize ESG Reporting Lines**: Clarify whether the Audit Committee or a dedicated Sustainability Committee holds primary responsibility for reviewing non-financial disclosures before publication.
+تتطلب بيئة الأعمال المعقدة في عام 2026 تفعيلاً حقيقياً لحوكمة الشركات لضمان استدامة الأعمال:
+
+*   **الإشراف على مخاطر الطرف الثالث (Third-Party Risk Governance):** يجب على مجالس الإدارات ولجان المراجعة التأكد من وجود إطار حوكمة صارم يغطي الموردين ومزودي الخدمات السحابية، لضمان عدم تسرب البيانات الحساسة أو انقطاع سلاسل الإمداد الرقمية.
+*   **تكامل خطوط الدفاع الثلاثة (Three Lines Model):** إعادة مواءمة الأدوار بين الإدارة التنفيذية (الخط الأول)، وإدارة المخاطر والامتثال (الخط الثاني)، والتدقيق الداخلي (الخط الثالث) لضمان عدم تكرار الجهود الرقابية وتغطية كافة الثغرات بفعالية.
+*   **الشفافية في الإفصاحات:** تبني معايير منظمة التعاون الاقتصادي والتنمية (OECD) والبنك الدولي (World Bank) في تعزيز الشفافية ومكافحة الفساد الإداري من خلال قنوات إبلاغ آمنة ومستقلة للمخالفات (Whistleblowing Channels).
 
 ---
 
 # Risk Management
 
-Enterprise Risk Management (ERM) frameworks are shifting toward **dynamic scenario modeling** to address geopolitical volatility and supply chain fragmentation. Recent insights from Protiviti and the Big Four indicate that static risk registers updated annually are obsolete.
+### 🎯 إدارة المخاطر المؤسسية (ERM) ومؤشرات المخاطر الرئيسية (KRIs)
 
-### Tactical Risk Indicators to Track:
-1.  **Concentration Risk**: The percentage of critical SaaS providers or third-party vendors located in geopolitically sensitive regions.
-2.  **Velocity of Risk**: The time elapsed between a risk trigger event (e.g., a regulatory change or cyber breach) and its material impact on operations.
+لم تعد إدارة المخاطر تقتصر على رصد التهديدات، بل أصبحت شريكاً في تمكين اقتناص الفرص الاستراتيجية. نوصي بتفعيل مؤشرات المخاطر الرئيسية التالية:
+
+| مجال الخطر | مؤشر الخطر الرئيسي (KRI) المقترح | الإجراء الوقائي الموصى به |
+| :--- | :--- | :--- |
+| **الأمن السيبراني** | عدد محاولات الاختراق الناجحة أو غير الناجحة شهرياً. | تحديث بروتوكولات الاستجابة للحوادث واختبار الاختراق الدوري. |
+| **الامتثال التنظيمي** | عدد التعديلات التشريعية غير المطبقة في السياسات الداخلية. | إنشاء مرصد تنظيمي آلي لمتابعة القوانين واللوائح الجديدة فور صدورها. |
+| **المرونة التشغيلية** | وقت التعافي الفعلي (RTO) للأنظمة الحيوية عند الانقطاع. | إجراء محاكاة دورية لسيناريوهات الكوارث وانقطاع الأعمال (BCP). |
 
 ---
 
 # Public Sector Reform
 
-Public sector auditing is undergoing a massive modernization drive, led by INTOSAI and supreme audit institutions like the US GAO and the UK National Audit Office (NAO). The focus is on **agile public financial management (PFM)** and auditing the effectiveness of digital public infrastructure (DPI).
+### 🏛️ تحديث الرقابة في القطاع الحكومي
 
-### Key Trends in Public Sector Auditing:
-*   **Auditing Digital Transformation Programs**: Moving away from auditing project budgets to auditing *realized benefits* and system usability.
-*   **Data-Driven Performance Audits**: Utilizing advanced data analytics to audit social welfare distribution systems and public procurement pipelines, reducing leakage and fraud in real-time.
+تشهد الأجهزة الرقابية الحكومية تحولاً جذرياً بقيادة مبادرات منظمة (INTOSAI) ومكاتب المحاسبة الوطنية مثل (GAO) في الولايات المتحدة و (NAO) في المملكة المتحدة:
+
+*   **الانتقال إلى تدقيق الأداء (Performance Auditing):** التركيز على تقييم "القيمة مقابل المال" (Value for Money) بدلاً من التدقيق المالي التقليدي القائم على المستندات فقط.
+*   **مكافحة الهدر المالي رقمياً:** استخدام تقنيات تنقيب البيانات (Data Mining) للكشف عن حالات التواطؤ في المشتريات الحكومية والمناقصات العامة.
+*   **تعزيز المساءلة:** تطبيق أطر الحوكمة الرشيدة الصادرة عن البنك الدولي لضمان كفاءة الإنفاق العام وتحقيق أهداف التنمية المستدامة.
 
 ---
 
 # Artificial Intelligence
 
-### 🤖 AI & Technology Audit Lab
-Auditors must leverage AI to audit AI. Below is a practical micro-use case and prompt designed to accelerate policy compliance testing.
+### 🤖 مختبر تدقيق الذكاء الاصطناعي (AI Audit Lab)
 
-#### Micro-Use Case: Automated Policy-to-Procedure Mapping
-Instead of manually comparing corporate policies against operational procedures to identify gaps, use a Large Language Model (LLM) to perform a semantic gap analysis.
+**حالة الاستخدام العملي:** مقارنة السياسات الداخلية باللوائح التنظيمية باستخدام الذكاء الاصطناعي التوليدي (LLMs).
 
-#### The Auditor's Prompt:
-```text
-Role: You are an expert IT General Controls (ITGC) Auditor.
-Task: Perform a detailed gap analysis between the provided Corporate Password Policy and the Operational System Administration Procedure.
-Input 1: [Insert Corporate Password Policy Text, e.g., "Passwords must be at least 14 characters, contain 3 character classes, and change every 90 days."]
-Input 2: [Insert Operational Procedure Text, e.g., "Active Directory settings require a minimum password length of 8 characters with annual rotation."]
-Instructions:
-1. Identify any direct contradictions or gaps between the policy and the procedure.
-2. Classify each gap as High, Medium, or Low risk.
-3. Provide actionable remediation recommendations for the system administrators.
-Format: Present the output in a clean markdown table with columns: Policy Requirement, Procedure Implementation, Gap Identified, Risk Level, Recommendation.
-```
+يمكن للمدققين استخدام النماذج اللغوية الكبيرة لمقارنة سياسة حماية البيانات الداخلية للمؤسسة مع التشريعات الوطنية (مثل نظام حماية البيانات الشخصية الصادر عن الهيئة السعودية للبيانات والذكاء الاصطناعي SDAIA أو قانون GDPR).
+
+#### 📝 نموذج الأمر (Prompt) الجاهز للاستخدام:
+
+> "بصفتك خبيراً في تدقيق الحوكمة والامتثال، قم بمقارنة مستند 'السياسة الداخلية لحماية البيانات' المرفق مع متطلبات 'نظام حماية البيانات الشخصية (PDPL)'. حدد بدقة أي فجوات (Gaps) في الامتثال، وصنف المخاطر الناتجة إلى (عالية، متوسطة، منخفضة)، وقدم توصيات صياغة محددة لتعديل السياسة الداخلية لتتوافق بنسبة 100% مع النظام."
 
 ---
 
 # Why It Matters
 
-The developments highlighted this week represent a fundamental shift in the auditor's mandate. Compliance is no longer the finish line; it is the baseline. 
+### 🔍 الأثر الاستراتيجي: لماذا يهمنا هذا الآن؟
 
-*   **For CAEs**: The transition to the new IIA Standards is a unique opportunity to reposition internal audit as a strategic partner to the board. Failing to align with these standards risks marginalizing the function.
-*   **For Risk and Control Professionals**: The integration of AI and ESG into core business processes means that traditional control frameworks must be updated immediately. If your controls do not address algorithmic bias, data privacy, and non-financial data integrity, your control environment is exposed.
+إن التطورات المتسارعة في معايير التدقيق والأنظمة الرقابية لعام 2026 تعني أن **"الانتظار والترقب" لم يعد خياراً مطروحاً**. 
+
+*   **للمدققين الداخليين:** عدم تبني المعايير العالمية الجديدة (IIA Standards) يهدد مصداقية الإدارة أمام لجنة المراجعة والجهات التنظيمية الخارجية.
+*   **لإدارة المخاطر:** الاعتماد على تقييمات المخاطر السنوية التقليدية يجعل المؤسسة عمياء أمام المخاطر السيبرانية والجيوسياسية سريعة التطور.
+*   **للإدارة التنفيذية:** الاستثمار في أدوات الرقابة المستمرة وحوكمة الذكاء الاصطناعي ليس تكلفة إضافية، بل هو درع واقٍ يحمي القيمة السوقية للمؤسسة ويمنع الغرامات المالية الجسيمة التي قد تعصف بالسمعة المؤسسية.
 
 ---
 
 # Recommended Reading
 
-1.  **The Institute of Internal Auditors (IIA)**: [Global Internal Audit Standards](https://www.theiia.org/en/standards/what-are-the-standards/global-internal-audit-standards/)
-2.  **Committee of Sponsoring Organizations (COSO)**: [Guidance on Internal Control over Sustainability Reporting (ICSR)](https://www.coso.org/guidance-on-icsr)
-3.  **US Government Accountability Office (GAO)**: [Artificial Intelligence: An Accountability Framework for Federal Agencies and Other Entities](https://www.gao.gov/products/gao-21-519sp)
-4.  **OECD Public Governance**: [OECD Recommendation on Public Integrity](https://www.oecd.org/governance/ethics/recommendation-public-integrity/)
-5.  **UK National Audit Office (NAO)**: [Digital Transformation in Government: Addressing the Barriers to Efficiency](https://www.nao.org.uk/reports/digital-transformation-in-government/)
+إليكم أبرز التقارير والدراسات الصادرة عن الجهات المهنية المعتمدة والتي تم الاعتماد عليها في هذا العدد:
+
+1.  [المعايير العالمية للتدقيق الداخلي - معهد المدققين الداخليين الدولي (IIA)](https://www.theiia.org/)
+2.  [إرشادات الرقابة الداخلية على التقارير غير المالية - لجنة المؤسسات الراعية (COSO)](https://www.coso.org/)
+3.  [أوراق عمل حوكمة القطاع العام ومكافحة الفساد - منظمة التعاون الاقتصادي والتنمية (OECD)](https://www.oecd.org/governance/)
+4.  [دليل تدقيق الذكاء الاصطناعي في الأجهزة الحكومية - مكتب المحاسبة الحكومي الأمريكي (GAO)](https://www.gao.gov)
+5.  [التكنولوجيا وجودة التدقيق في العصر الرقمي - الاتحاد الدولي للمحاسبين (IFAC)](https://www.ifac.org/)
