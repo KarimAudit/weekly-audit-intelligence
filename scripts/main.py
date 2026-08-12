@@ -1,4 +1,4 @@
-"""Weekly Audit Intelligence Agent (AIA) - Main Execution Script."""
+"""Weekly Audit Intelligence Agent (AIA) - Main Execution Script (World-Class Arabic Magazine Layout)."""
 
 import datetime
 import json
@@ -18,6 +18,10 @@ from google import genai
 from google.genai import types
 import markdown
 from docx import Document
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,7 +32,7 @@ logger = logging.getLogger("AIA-Main")
 
 
 class AuditIntelligenceAgent:
-    """Orchestrates source collection, AI report generation, artifact saving, and email dispatch."""
+    """Orchestrates source collection, AI report generation (Arabic focus), magazine-style artifact saving, and email dispatch."""
 
     def __init__(
         self,
@@ -68,7 +72,7 @@ class AuditIntelligenceAgent:
         if not filepath.exists():
             logger.warning(f"Sources file not found at {filepath}. Using defaults from config.")
             return self.config.get("default_sources", [])
-        
+
         sources = []
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
@@ -80,7 +84,7 @@ class AuditIntelligenceAgent:
     def gather_source_context(self) -> str:
         logger.info("Gathering source references and contextual metadata...")
         context_blocks = []
-        
+
         for entry in self.sources:
             url_match = re.search(r"https?://[^\s]+", entry)
             target_url = url_match.group(0) if url_match else None
@@ -91,7 +95,7 @@ class AuditIntelligenceAgent:
 
             try:
                 req = urllib.request.Request(
-                    target_url, 
+                    target_url,
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
                 )
                 with urllib.request.urlopen(req, timeout=5) as response:
@@ -106,19 +110,24 @@ class AuditIntelligenceAgent:
 
     def generate_report(self, source_context: str) -> str:
         logger.info("Requesting report generation from Gemini API...")
-        
-        primary_model = self.config.get("model_name", "gemini-3.5-flash")
-        candidate_models = [primary_model, "gemini-3.6-flash", "gemini-3.5-flash-lite"]
+
+        primary_model = self.config.get("model_name", "gemini-3.6-flash")
+        candidate_models = [primary_model, "gemini-3.6-flash", "gemini-3.6-pro", "gemini-3.5-flash"]
         candidate_models = list(dict.fromkeys(candidate_models))
-        
+
         today_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-        
+
         user_prompt = (
             f"Date of Newsletter: {today_str}\n\n"
             f"Target Authoritative Reference Sources & Topics:\n"
             f"{source_context}\n\n"
-            f"Generate an engaging, highly practical executive newsletter following the exact structure and guidelines defined in your system prompt. "
-            f"Include real, functional hyperlinks to official reports and authoritative sources in the final section."
+            f"Instruction: Generate a world-class, McKinsey/EY-style executive newsletter in formal business Arabic (اللغة العربية الفصحى).\n"
+            f"Formatting Requirements:\n"
+            f"- Incorporate high-impact section headers with contextual Arabic business terminology.\n"
+            f"- Use professional emojis/icons strategically (e.g., 📊, 🛡️, 💡, ⚖️, 🎯, 🔍) to improve visual structure without cluttering.\n"
+            f"- Include actionable Executive Summaries, Key Risk Indicators, and Governance Insights.\n"
+            f"- Keep technical English terms or abbreviations (e.g., IIA Standards, ISO 27001, ESG, COSO) in parentheses where necessary.\n"
+            f"- Include clickable, functional markdown links [المصدر](URL) in the references section."
         )
 
         last_exception = None
@@ -145,8 +154,17 @@ class AuditIntelligenceAgent:
             raise last_exception
         raise RuntimeError("Failed to generate report with available Gemini models.")
 
+    def _set_cell_background(self, cell, hex_color: str):
+        """Helper to set background color for docx table cells."""
+        tc_pr = cell._element.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear')
+        shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), hex_color)
+        tc_pr.append(shd)
+
     def save_artifacts(self, report_md: str) -> Path:
-        """Save report artifacts as Markdown and DOCX."""
+        """Save report artifacts as Markdown and Magazine-Style formatted DOCX."""
         reports_dir = self.base_dir / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         date_suffix = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
@@ -156,98 +174,247 @@ class AuditIntelligenceAgent:
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(report_md)
 
-        # Save DOCX
+        # Build World-Class Magazine DOCX
         docx_path = reports_dir / f"audit_intelligence_{date_suffix}.docx"
         doc = Document()
-        doc.add_heading("Audit Intelligence Weekly Briefing", 0)
-        for paragraph in report_md.split("\n\n"):
-            if paragraph.strip():
-                doc.add_paragraph(paragraph.strip())
-        doc.save(str(docx_path))
 
+        # Set RTL for Document
+        section = doc.sections[0]
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
+
+        # 1. Magazine Cover Header Banner (Table-based styling)
+        banner_table = doc.add_table(rows=1, cols=1)
+        banner_table.autofit = False
+        banner_table.columns[0].width = Inches(6.8)
+        cell = banner_table.cell(0, 0)
+        self._set_cell_background(cell, "0F172A")  # Slate Navy
+
+        cell_p = cell.paragraphs[0]
+        cell_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        cell_p.paragraph_format.space_before = Pt(14)
+        cell_p.paragraph_format.space_after = Pt(4)
+
+        run_sub = cell_p.add_run(f"موجز تنفيذي رفيع المستوى  •  {date_suffix}\n")
+        run_sub.font.name = "Arial"
+        run_sub.font.size = Pt(10)
+        run_sub.font.color.rgb = RGBColor(148, 163, 184)
+
+        run_title = cell_p.add_run("النشرة الذكية للتدقيق والحوكمة\nAudit & Governance Intelligence Brief")
+        run_title.font.name = "Arial"
+        run_title.font.size = Pt(20)
+        run_title.font.bold = True
+        run_title.font.color.rgb = RGBColor(255, 255, 255)
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+
+        # Parse paragraphs and apply high-end styles
+        lines = report_md.split("\n")
+        for line in lines:
+            line_str = line.strip()
+            if not line_str:
+                continue
+
+            if line_str.startswith("# "):
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p.paragraph_format.space_before = Pt(18)
+                p.paragraph_format.space_after = Pt(6)
+                run = p.add_run(line_str.replace("# ", ""))
+                run.font.name = "Arial"
+                run.font.size = Pt(18)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(15, 23, 42)
+
+            elif line_str.startswith("## "):
+                # Ey-style Banner Header
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p.paragraph_format.space_before = Pt(14)
+                p.paragraph_format.space_after = Pt(4)
+                run = p.add_run("  " + line_str.replace("## ", "") + "  ")
+                run.font.name = "Arial"
+                run.font.size = Pt(14)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(37, 99, 235)
+
+            elif line_str.startswith("### "):
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p.paragraph_format.space_before = Pt(10)
+                p.paragraph_format.space_after = Pt(2)
+                run = p.add_run(line_str.replace("### ", ""))
+                run.font.name = "Arial"
+                run.font.size = Pt(12)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(15, 23, 42)
+
+            elif line_str.startswith("> "):
+                # Executive Highlight Box
+                box_table = doc.add_table(rows=1, cols=1)
+                box_cell = box_table.cell(0, 0)
+                self._set_cell_background(box_cell, "F1F5F9")
+                bp = box_cell.paragraphs[0]
+                bp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                brun = bp.add_run(line_str.replace("> ", ""))
+                brun.font.name = "Arial"
+                brun.font.size = Pt(10.5)
+                brun.font.italic = True
+                brun.font.color.rgb = RGBColor(51, 65, 85)
+
+            else:
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p.paragraph_format.space_after = Pt(6)
+                run = p.add_run(line_str)
+                run.font.name = "Arial"
+                run.font.size = Pt(10.5)
+                run.font.color.rgb = RGBColor(30, 41, 59)
+
+        doc.save(str(docx_path))
         logger.info(f"Saved weekly newsletter artifacts to {reports_dir}")
         return docx_path
 
     def build_executive_newsletter_html(self, report_md: str) -> str:
-        """Construct an executive newsletter HTML email layout with styled links."""
+        """Construct an EY/McKinsey-caliber HTML email layout with styled headers and RTL support."""
         html_content = markdown.markdown(report_md, extensions=['tables', 'fenced_code'])
-        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%B %d, %Y")
+        date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
         return f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="ar" dir="rtl">
         <head>
             <meta charset="utf-8">
             <style>
+                @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+
                 body {{
-                    font-family: 'Georgia', 'Times New Roman', serif;
-                    background-color: #f4f6f9;
-                    color: #222222;
+                    font-family: 'Tajawal', 'Segoe UI', Arial, sans-serif;
+                    background-color: #0f172a;
+                    color: #1e293b;
                     margin: 0;
-                    padding: 0;
+                    padding: 20px 0;
+                    direction: rtl;
+                    text-align: right;
                 }}
                 .email-wrapper {{
-                    max-width: 680px;
-                    margin: 30px auto;
+                    max-width: 720px;
+                    margin: 0 auto;
                     background: #ffffff;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 6px;
+                    border-radius: 8px;
                     overflow: hidden;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
                 }}
+                /* McKinsey / EY Header Banner */
                 .email-header {{
-                    background-color: #0f172a; /* Slate Navy */
+                    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
                     color: #ffffff;
-                    padding: 35px 40px;
-                    border-bottom: 4px solid #3b82f6; /* Accent Blue */
+                    padding: 40px;
+                    border-bottom: 4px solid #059669; /* Emerald Accent */
+                }}
+                .email-header .tagline {{
+                    display: inline-block;
+                    background-color: rgba(255, 255, 255, 0.1);
+                    color: #38bdf8;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    text-transform: uppercase;
+                    margin-bottom: 12px;
                 }}
                 .email-header h1 {{
-                    font-family: 'Georgia', serif;
                     font-size: 26px;
-                    font-weight: normal;
+                    font-weight: 700;
                     margin: 0 0 8px 0;
+                    line-height: 1.3;
                 }}
-                .email-header .sub-header {{
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                .email-header .meta {{
                     font-size: 13px;
-                    text-transform: uppercase;
-                    letter-spacing: 1.5px;
                     color: #94a3b8;
                     margin: 0;
                 }}
+                /* Main Body Styling */
                 .email-body {{
                     padding: 40px;
-                    font-size: 16px;
-                    line-height: 1.8;
+                    font-size: 15.5px;
+                    line-height: 1.9;
                     color: #334155;
                 }}
-                .email-body h1, .email-body h2, .email-body h3 {{
-                    font-family: 'Georgia', serif;
+                /* Section Headings Styling */
+                .email-body h1 {{
+                    font-size: 21px;
                     color: #0f172a;
-                    margin-top: 30px;
-                    margin-bottom: 12px;
-                    font-weight: 600;
+                    background: #f8fafc;
+                    padding: 10px 16px;
+                    border-right: 5px solid #2563eb;
+                    border-radius: 0 6px 6px 0;
+                    margin-top: 32px;
+                    margin-bottom: 16px;
+                    font-weight: 700;
                 }}
-                .email-body h1 {{ font-size: 22px; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; }}
-                .email-body h2 {{ font-size: 19px; }}
+                .email-body h2 {{
+                    font-size: 18px;
+                    color: #0f172a;
+                    background: #f1f5f9;
+                    padding: 8px 14px;
+                    border-right: 4px solid #059669;
+                    border-radius: 0 4px 4px 0;
+                    margin-top: 24px;
+                    margin-bottom: 12px;
+                    font-weight: 700;
+                }}
+                .email-body h3 {{
+                    font-size: 16px;
+                    color: #1e293b;
+                    margin-top: 18px;
+                    margin-bottom: 8px;
+                    font-weight: 700;
+                }}
+                /* Highlights & Quotes */
+                .email-body blockquote {{
+                    margin: 20px 0;
+                    padding: 16px 20px;
+                    background-color: #f0fdf4;
+                    border-right: 4px solid #16a34a;
+                    border-radius: 4px;
+                    color: #166534;
+                    font-weight: 500;
+                }}
                 .email-body a {{
                     color: #2563eb;
                     text-decoration: underline;
-                    font-weight: 500;
+                    font-weight: 600;
                 }}
-                .email-body blockquote {{
+                /* Corporate Tables */
+                .email-body table {{
+                    width: 100%;
+                    border-collapse: collapse;
                     margin: 24px 0;
-                    padding: 16px 20px;
-                    background-color: #f8fafc;
-                    border-left: 4px solid #3b82f6;
-                    font-style: italic;
-                    color: #475569;
+                    font-size: 14.5px;
                 }}
+                .email-body th {{
+                    background-color: #0f172a;
+                    color: #ffffff;
+                    font-weight: 600;
+                    padding: 12px;
+                    text-align: right;
+                }}
+                .email-body td {{
+                    border-bottom: 1px solid #e2e8f0;
+                    padding: 10px 12px;
+                    text-align: right;
+                }}
+                .email-body tr:nth-child(even) {{
+                    background-color: #f8fafc;
+                }}
+                /* Executive Footer */
                 .email-footer {{
                     background-color: #f8fafc;
                     padding: 24px 40px;
                     border-top: 1px solid #e2e8f0;
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
                     font-size: 12px;
                     color: #64748b;
                     text-align: center;
@@ -257,14 +424,15 @@ class AuditIntelligenceAgent:
         <body>
             <div class="email-wrapper">
                 <div class="email-header">
-                    <p class="sub-header">Executive Briefing &bull; {date_str}</p>
-                    <h1>Audit Intelligence Weekly</h1>
+                    <span class="tagline">موجز الاستشارات التنفيذية</span>
+                    <h1>النشرة الذكية للتدقيق والحوكمة 🏛️</h1>
+                    <p class="meta">اصدار قيادي أسبوعي  &bull;  {date_str}</p>
                 </div>
-                <div class="email-body" dir="auto">
+                <div class="email-body">
                     {html_content}
                 </div>
                 <div class="email-footer">
-                    Confidential &bull; Prepared for Internal Audit Leadership
+                    سري للغاية &bull; تم التطوير خصيصاً لقيادات التدقيق الداخلي والحوكمة المؤسسية
                 </div>
             </div>
         </body>
@@ -289,7 +457,7 @@ class AuditIntelligenceAgent:
             return
 
         date_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-        subject = f"Audit Intelligence Executive Briefing - {date_str}"
+        subject = f"🏛️ موجز التدقيق والحوكمة الأسبوعي - {date_str}"
 
         msg = MIMEMultipart()
         msg["Subject"] = subject
