@@ -5,7 +5,7 @@
   "report_time_utc": "05:00",
   "email_recipients": [
     "andro.ios.developer@gmail.com",
-    "karimbenkarim@yahoo.fr"
+    "karimbenkarim@yahoo.fr","karim.sliti@sab.gov.qa"
   ],
   "model_name": "gemini-3.5-flash",
   "max_articles": 25,
