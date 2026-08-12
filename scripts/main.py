@@ -10,6 +10,13 @@ from email.mime.application import MIMEApplication
 from datetime import datetime
 from typing import List, Dict, Any
 
+# Auto-load .env file if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import docx
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
@@ -21,7 +28,7 @@ from docx.oxml.ns import nsdecls, qn
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Corporate Palette (Customized)
+# Corporate Palette
 NAVY_PRIMARY = "B734F7"     # Dark Header Fill / Primary Accent
 ACCENT_BLUE  = "B12763"     # Secondary Highlight / Borders
 GOLD_ACCENT  = "D4AF37"     # Premium Highlight
@@ -228,20 +235,18 @@ def build_word_document(content_blocks: List[Dict[str, Any]], reports_dir: str =
     return filename
 
 def convert_docx_to_pdf(docx_path: str) -> str:
-    """Converts the DOCX document to PDF inside the reports folder."""
+    """Converts DOCX document to PDF. Returns path to PDF if successful, or fallback DOCX path."""
     pdf_path = docx_path.rsplit('.', 1)[0] + ".pdf"
     
     try:
-        # Preferred method for Windows / macOS (Requires MS Word installed)
         from docx2pdf import convert
         convert(docx_path, pdf_path)
         logging.info(f"Successfully converted DOCX to PDF using docx2pdf: {pdf_path}")
         return pdf_path
     except Exception as e_docx2pdf:
-        logging.warning(f"docx2pdf conversion failed or unavailable: {e_docx2pdf}. Attempting LibreOffice fallback...")
+        logging.warning(f"docx2pdf conversion failed/unavailable: {e_docx2pdf}. Trying LibreOffice...")
         
     try:
-        # Fallback method (Ideal for Linux / headless servers with LibreOffice)
         output_dir = os.path.dirname(docx_path)
         subprocess.run(
             ["libreoffice", "--headless", "--convert-to", "pdf", docx_path, "--outdir", output_dir],
@@ -252,9 +257,8 @@ def convert_docx_to_pdf(docx_path: str) -> str:
         logging.info(f"Successfully converted DOCX to PDF using LibreOffice: {pdf_path}")
         return pdf_path
     except Exception as e_libreoffice:
-        logging.error(f"Failed to convert DOCX to PDF using LibreOffice: {e_libreoffice}")
+        logging.warning(f"LibreOffice conversion failed: {e_libreoffice}. Falling back to DOCX attachment.")
         
-    # Return docx_path if conversion fails completely
     return docx_path
 
 def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
@@ -321,8 +325,8 @@ def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
     </html>
     """
 
-def send_email_report(html_content: str, pdf_path: str):
-    """Sends the HTML report along with the PDF attachment via SMTP."""
+def send_email_report(html_content: str, report_filepath: str):
+    """Sends HTML report along with available attachment (PDF/DOCX) via SMTP."""
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", 465))
     sender_email = os.getenv("SENDER_EMAIL")
@@ -331,10 +335,9 @@ def send_email_report(html_content: str, pdf_path: str):
     recipient_emails = [e.strip() for e in recipient_raw.split(",") if e.strip()]
 
     if not sender_email or not sender_password or not recipient_emails:
-        logging.warning("SMTP environment variables missing or invalid. Email was not dispatched.")
-        return
+        logging.error("CRITICAL: SMTP credentials missing! Ensure SENDER_EMAIL, SENDER_PASSWORD, and RECIPIENT_EMAILS are set in environment or .env file.")
+        raise ValueError("Missing required SMTP environment variables.")
 
-    # Use 'mixed' multipart to allow both inline HTML body and attached files
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"النشرة الأسبوعية للحوكمة والتدقيق الداخلي — {datetime.now().strftime('%Y-%m-%d')}"
     msg["From"] = sender_email
@@ -343,24 +346,23 @@ def send_email_report(html_content: str, pdf_path: str):
     # Attach HTML Body
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    # Attach PDF Document
-    if os.path.exists(pdf_path) and pdf_path.endswith(".pdf"):
-        with open(pdf_path, "rb") as f:
-            attachment = MIMEApplication(f.read(), _subtype="pdf")
-            attachment.add_header("Content-Disposition", "attachment", filename=os.path.basename(pdf_path))
+    # Attach Report File (PDF or fallback DOCX)
+    if os.path.exists(report_filepath):
+        subtype = "pdf" if report_filepath.endswith(".pdf") else "vnd.openxmlformats-officedocument.wordprocessingml.document"
+        with open(report_filepath, "rb") as f:
+            attachment = MIMEApplication(f.read(), _subtype=subtype)
+            attachment.add_header("Content-Disposition", "attachment", filename=os.path.basename(report_filepath))
             msg.attach(attachment)
-            logging.info(f"Attached PDF report: {os.path.basename(pdf_path)}")
+            logging.info(f"Attached report file: {os.path.basename(report_filepath)}")
     else:
-        logging.warning(f"Target PDF file was not found or is unreadable: {pdf_path}")
+        logging.warning(f"Target report file missing or unreadable: {report_filepath}")
 
     try:
         if smtp_port == 465:
-            # SSL Connection
             with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
                 server.login(sender_email, sender_password)
                 server.sendmail(sender_email, recipient_emails, msg.as_string())
         else:
-            # TLS Connection (Standard for port 587)
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
                 server.login(sender_email, sender_password)
@@ -368,7 +370,8 @@ def send_email_report(html_content: str, pdf_path: str):
                 
         logging.info(f"Email newsletter successfully dispatched to {len(recipient_emails)} recipient(s).")
     except Exception as e:
-        logging.error(f"Failed to dispatch email report: {str(e)}")
+        logging.error(f"Failed to dispatch email report: {str(e)}", exc_info=True)
+        raise e
 
 def run_pipeline():
     """Main pipeline entry point."""
@@ -394,8 +397,8 @@ def run_pipeline():
     # 1. Build Word Report inside 'reports' folder
     docx_filepath = build_word_document(sample_data, reports_dir="reports")
     
-    # 2. Convert Word Document to PDF
-    pdf_filepath = convert_docx_to_pdf(docx_filepath)
+    # 2. Convert Word Document to PDF (or fallback to docx_filepath if PDF tools unavailable)
+    report_filepath = convert_docx_to_pdf(docx_filepath)
     
     # 3. Build HTML Email Content
     email_html = generate_email_html(sample_data)
@@ -404,8 +407,8 @@ def run_pipeline():
     with open("email_preview.html", "w", encoding="utf-8") as f:
         f.write(email_html)
         
-    # 5. Dispatch Email with PDF Attachment
-    send_email_report(email_html, pdf_filepath)
+    # 5. Dispatch Email with Attachment
+    send_email_report(email_html, report_filepath)
 
 if __name__ == "__main__":
     run_pipeline()
