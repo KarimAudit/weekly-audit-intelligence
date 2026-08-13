@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,7 +18,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -25,14 +26,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: Execute Audit Intelligence Agent
-  env:
-    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-
-    SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-    SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-    RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-
-  run: python scripts/main.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+        run: python scripts/main.py
 
       - name: Commit and push generated report
         run: |
