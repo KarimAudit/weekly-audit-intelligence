@@ -25,11 +25,14 @@ jobs:
           pip install -r requirements.txt
 
       - name: Execute Audit Intelligence Agent
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        run: python scripts/main.py
+  env:
+    GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+    SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+    SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+    RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+
+  run: python scripts/main.py
 
       - name: Commit and push generated report
         run: |
