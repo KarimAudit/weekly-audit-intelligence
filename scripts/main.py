@@ -260,7 +260,14 @@ def convert_docx_to_pdf(docx_path: str) -> str:
         logging.warning(f"LibreOffice conversion failed: {e_libreoffice}. Falling back to DOCX attachment.")
         
     return docx_path
-
+- name: Verify email environment
+  shell: bash
+  run: |
+    echo "SENDER_EMAIL present: $([[ -n "$SENDER_EMAIL" ]] && echo YES || echo NO)"
+    echo "SENDER_PASSWORD present: $([[ -n "$SENDER_PASSWORD" ]] && echo YES || echo NO)"
+    echo "RECIPIENT_EMAILS present: $([[ -n "$RECIPIENT_EMAILS" ]] && echo YES || echo NO)"
+    echo "SMTP_SERVER: $SMTP_SERVER"
+    echo "SMTP_PORT: $SMTP_PORT"
 def generate_email_html(content_blocks: List[Dict[str, Any]]) -> str:
     """Generates a responsive high-contrast HTML Email."""
     cards_html = ""
