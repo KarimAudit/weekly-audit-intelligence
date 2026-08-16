@@ -57,7 +57,18 @@ jobs:
           print("SMTP_SERVER:", os.getenv("SMTP_SERVER"))
           print("SMTP_PORT:", os.getenv("SMTP_PORT"))
           PY
+      - name: Verify email environment
+        shell: bash
+        run: |
+          echo "SENDER_EMAIL present: $([[ -n "$SENDER_EMAIL" ]] && echo YES || echo NO)"
+          echo "SENDER_PASSWORD present: $([[ -n "$SENDER_PASSWORD" ]] && echo YES || echo NO)"
+          echo "RECIPIENT_EMAILS present: $([[ -n "$RECIPIENT_EMAILS" ]] && echo YES || echo NO)"
+          echo "SMTP_SERVER: $SMTP_SERVER"
+          echo "SMTP_PORT: $SMTP_PORT"
 
+      - name: Generate and send report
+        run: |
+          python scripts/main.py
       - name: Generate and send report
         run: |
           python scripts/main.py
