@@ -8,8 +8,16 @@ on:
 jobs:
   generate-report:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
+
+    env:
+      SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+      SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+      RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+      SMTP_SERVER: smtp.gmail.com
+      SMTP_PORT: "465"
 
     steps:
       - name: Checkout repository
@@ -18,47 +26,49 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
 
-      - name: Verify injected secrets
-        env:
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+      - name: Verify email configuration
         run: |
           python - <<'PY'
           import os
 
-          for name in [
+          required = [
               "SENDER_EMAIL",
               "SENDER_PASSWORD",
               "RECIPIENT_EMAILS"
-          ]:
+          ]
+
+          for name in required:
               value = os.getenv(name)
-              print(f"{name}: {'FOUND' if value else 'MISSING'}")
+              if value:
+                  if name == "SENDER_PASSWORD":
+                      print(f"{name}: PRESENT")
+                  else:
+                      print(f"{name}: PRESENT -> {value}")
+              else:
+                  print(f"{name}: MISSING")
+
+          print("SMTP_SERVER:", os.getenv("SMTP_SERVER"))
+          print("SMTP_PORT:", os.getenv("SMTP_PORT"))
           PY
 
-      - name: Execute Audit Intelligence Agent
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
-        run: python scripts/main.py
-
-      - name: Commit and push generated report
+      - name: Generate and send report
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python scripts/main.py
+
+      - name: Commit generated report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add reports/
-          git commit -m "Automated Weekly Report - $(date +'%Y-%m-%d')" || exit 0
+
+          git diff --cached --quiet || git commit -m "Automated weekly audit intelligence report"
+
           git push
