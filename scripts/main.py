@@ -366,7 +366,7 @@ def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
     which is a worse outcome than the run simply failing loudly.
     """
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
     if not api_key:
         log.error(
