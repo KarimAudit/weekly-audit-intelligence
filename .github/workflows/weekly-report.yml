@@ -12,8 +12,8 @@ jobs:
       contents: write
 
     env:
-      SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-      SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+      SENDER_EMAIL: ${{ secrets.SMTP_USER }}
+      SENDER_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
       SMTP_SERVER: smtp.gmail.com
       SMTP_PORT: "465"
@@ -51,7 +51,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add reports/
-
           git diff --cached --quiet || git commit -m "Automated weekly audit intelligence report"
-
           git push
