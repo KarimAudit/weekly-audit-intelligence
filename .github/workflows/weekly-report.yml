@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
-
 jobs:
   generate-report:
     runs-on: ubuntu-latest
@@ -33,30 +32,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Verify email configuration
-        run: |
-          python - <<'PY'
-          import os
-
-          required = [
-              "SENDER_EMAIL",
-              "SENDER_PASSWORD",
-              "RECIPIENT_EMAILS"
-          ]
-
-          for name in required:
-              value = os.getenv(name)
-              if value:
-                  if name == "SENDER_PASSWORD":
-                      print(f"{name}: PRESENT")
-                  else:
-                      print(f"{name}: PRESENT -> {value}")
-              else:
-                  print(f"{name}: MISSING")
-
-          print("SMTP_SERVER:", os.getenv("SMTP_SERVER"))
-          print("SMTP_PORT:", os.getenv("SMTP_PORT"))
-          PY
       - name: Verify email environment
         shell: bash
         run: |
@@ -66,9 +41,6 @@ jobs:
           echo "SMTP_SERVER: $SMTP_SERVER"
           echo "SMTP_PORT: $SMTP_PORT"
 
-      - name: Generate and send report
-        run: |
-          python scripts/main.py
       - name: Generate and send report
         run: |
           python scripts/main.py
