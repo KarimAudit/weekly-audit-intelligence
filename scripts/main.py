@@ -26,7 +26,7 @@ REQUIRED ENVIRONMENT VARIABLES
   SENDER_EMAIL, SENDER_PASSWORD, RECIPIENT_EMAILS   SMTP credentials
 
 OPTIONAL:
-  GEMINI_MODEL            default "gemini-2.5-flash"
+  GEMINI_MODEL            default "gemini-3.6-flash"
   SMTP_SERVER, SMTP_PORT  default smtp.gmail.com / 465
 
 ----------------------------------------------------------------------------
