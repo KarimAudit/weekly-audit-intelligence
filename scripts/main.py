@@ -1,28 +1,80 @@
+# -*- coding: utf-8 -*-
 """
 ============================================================================
 النشرة الأسبوعية للحوكمة والتدقيق الداخلي — Governance & Audit Weekly
 ============================================================================
 Pipeline:
   1) Gemini (with live Google Search grounding) researches this week's most
-     relevant developments across 8 professional domains, using a curated
-     list of authoritative sources, and returns strict structured JSON.
+     relevant developments across 8 professional domains, using a curated,
+     deep-researched list of authoritative sources, and returns strict
+     structured JSON.
   2) A luxury-styled DOCX is built from that JSON (cover, executive
      dashboard, quick wins, "management flashback", per-domain briefs with
      real hyperlinks, further-reading / book picks).
   3) DOCX -> PDF.
   4) A matching luxury HTML email is generated and dispatched.
 
-Environment variables required:
-  GEMINI_API_KEY        Google AI Studio API key
+  If step 1 fails for any reason, the pipeline STOPS (non-zero exit) and
+  does NOT send an email. A previous version emailed a "sorry, this failed"
+  placeholder to the real distribution list, which is worse than sending
+  nothing — that behaviour has been removed.
+
+----------------------------------------------------------------------------
+REQUIRED ENVIRONMENT VARIABLES
+----------------------------------------------------------------------------
+  GEMINI_API_KEY  (or GOOGLE_API_KEY)   Google AI Studio API key
   SENDER_EMAIL, SENDER_PASSWORD, RECIPIENT_EMAILS   SMTP credentials
-Optional:
-  GEMINI_MODEL           default "gemini-2.5-flash"
-  SMTP_SERVER, SMTP_PORT default smtp.gmail.com / 465
+
+OPTIONAL:
+  GEMINI_MODEL            default "gemini-2.5-flash"
+  SMTP_SERVER, SMTP_PORT  default smtp.gmail.com / 465
+
+----------------------------------------------------------------------------
+REQUIRED PYTHON PACKAGES (requirements.txt)
+----------------------------------------------------------------------------
+  google-genai          <- the CURRENT SDK. The old "google-generativeai"
+                            package reached end-of-life on 2025-11-30 and
+                            must not be used.
+  python-docx
+  python-dotenv          (optional, only for local .env loading)
+  docx2pdf                (optional — Windows/macOS only; on Linux CI the
+                            pipeline falls back to LibreOffice automatically)
+
+----------------------------------------------------------------------------
+REQUIRED SYSTEM PACKAGES ON THE CI RUNNER (GitHub Actions ubuntu-latest)
+----------------------------------------------------------------------------
+This is the fix for Arabic text rendering as tofu/question marks in the
+PDF: standard Ubuntu CI runners do NOT ship "Calibri" and do NOT ship any
+font with proper Arabic script shaping. Word/LibreOffice then silently
+substitute a fallback font that has no Arabic glyphs, which is exactly
+what produced the "?????" you saw. Add this step to the workflow BEFORE
+the step that runs this script:
+
+    - name: Install fonts + LibreOffice
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \\
+          libreoffice \\
+          fonts-hosny-amiri \\
+          fonts-crosextra-carlito
+
+  fonts-hosny-amiri    -> installs "Amiri", a classical, professionally
+                           designed Naskh Arabic typeface (used on 65,000+
+                           sites, served via Google Fonts) — this is the
+                           font this script now asks for explicitly.
+  fonts-crosextra-carlito -> installs "Carlito", the metric-compatible
+                           open-source clone of Calibri, for the Latin /
+                           English-technical-term portions of the text.
+
+At start-up this script checks (via `fc-list`) whether Amiri is actually
+installed and logs a loud, explicit warning — instead of silently
+producing broken PDFs again — if it is not.
 ============================================================================
 """
 
 import os
 import re
+import sys
 import json
 import logging
 import smtplib
@@ -30,8 +82,9 @@ import subprocess
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from email.header import Header
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 try:
     from dotenv import load_dotenv
@@ -74,13 +127,38 @@ RISK_COLORS = {
     "منخفض": "1E6B3E",
 }
 
-# Arabic-friendly font that also renders Latin technical terms cleanly.
-# Set on both the "ascii" and "complex script" slots so Word picks it up
-# for RTL runs (python-docx's font.name only sets w:ascii by default).
-FONT_BODY = "Calibri"
-FONT_HEAD = "Calibri"
+# Two distinct fonts, deliberately: one for Arabic (complex-script) runs
+# and one for Latin (ascii) runs within the same paragraph. python-docx's
+# font.name only sets w:ascii — Word/LibreOffice then pick whatever their
+# *default* complex-script font is for the Arabic characters, which on a
+# bare Linux CI box has no Arabic glyphs at all. We set w:cs explicitly
+# instead of leaving it to chance. See the module docstring for the apt
+# packages that must be installed for these to actually be present.
+FONT_ARABIC = "Amiri"     # complex-script (w:cs) — classical Naskh, elegant
+FONT_LATIN = "Carlito"    # ascii (w:ascii) — open, metric-compatible Calibri
 
 ISSUE_NO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".issue_number")
+
+
+def verify_fonts_installed():
+    """Checks (via fontconfig) whether the fonts this document depends on
+    are actually present, and logs a loud, actionable warning if not —
+    so a broken-looking PDF is diagnosable instead of a silent surprise."""
+    for font_name, apt_pkg in [(FONT_ARABIC, "fonts-hosny-amiri"), (FONT_LATIN, "fonts-crosextra-carlito")]:
+        try:
+            result = subprocess.run(["fc-list", f":family={font_name}"], capture_output=True, text=True, timeout=10)
+            if not result.stdout.strip():
+                log.warning(
+                    f"⚠ Font '{font_name}' was NOT found by fontconfig on this machine. "
+                    f"Arabic/Latin text may render as missing glyphs or question marks. "
+                    f"Fix: sudo apt-get install -y {apt_pkg}"
+                )
+            else:
+                log.info(f"Font check OK: '{font_name}' is installed.")
+        except FileNotFoundError:
+            log.warning("fc-list not found — cannot verify font availability (fontconfig may be missing).")
+        except Exception as e:
+            log.warning(f"Font check for '{font_name}' failed: {e}")
 
 
 def next_issue_number() -> int:
@@ -103,10 +181,17 @@ def next_issue_number() -> int:
 # ============================================================================
 # 2. CURATED SOURCE LIBRARY  (used to steer Gemini's grounded research)
 # ============================================================================
+# Base list = exactly what was supplied originally. Additions below are
+# marked "# added" and were individually verified by live web search
+# (not guessed) — each is a currently-live, authoritative body directly
+# relevant to one of the newsletter's 8 domains but missing from the
+# original sample list.
 SOURCES = {
     "تدقيق داخلي وأداء (Internal / Performance Audit)": [
         ("IIA - The Institute of Internal Auditors", "https://www.theiia.org/"),
         ("INTOSAI", "https://www.intosai.org/"),
+        ("ISSAI - INTOSAI Standards", "https://www.issai.org/"),               # added
+        ("ECIIA - European Confederation of Institutes of Internal Auditing", "https://www.eciia.eu/"),  # added
         ("NAO UK", "https://www.nao.org.uk"),
         ("GAO US", "https://www.gao.gov"),
         ("AuditNet", "https://www.auditnet.org"),
@@ -118,11 +203,24 @@ SOURCES = {
         ("OECD Public Governance", "https://www.oecd.org/governance/"),
         ("World Bank Governance", "https://www.worldbank.org/"),
         ("LSE - London School of Economics", "https://www.lse.ac.uk"),
+        ("ICGN - International Corporate Governance Network", "https://www.icgn.org/"),  # added
+        ("Transparency International", "https://www.transparency.org/"),      # added
+        ("Ash Center for Democratic Governance, Harvard Kennedy School", "https://ash.harvard.edu/"),  # added
     ],
     "الرقابة الداخلية وإدارة المخاطر (Internal Control / Risk / COSO)": [
         ("COSO", "https://www.coso.org/"),
         ("IFAC", "https://www.ifac.org/"),
         ("Protiviti", "https://www.protiviti.com"),
+        ("ISO 31000 - Risk Management", "https://www.iso.org/standards/popular/iso-31000-family"),  # added
+        ("GARP - Global Association of Risk Professionals", "https://www.garp.org/"),  # added
+        ("FERMA - Federation of European Risk Management Associations", "https://ferma.eu/"),  # added
+    ],
+    "الموارد البشرية (HR)": [                                                  # added (new category)
+        ("SHRM - Society for Human Resource Management", "https://www.shrm.org/"),
+        ("CIPD - Chartered Institute of Personnel and Development", "https://www.cipd.org/"),
+    ],
+    "المحاسبة الإدارية (Management Accounting)": [                              # added (new category)
+        ("IMA - Institute of Management Accountants", "https://www.imanet.org/"),
     ],
     "استشارات وأفضل الممارسات (Big Four / Strategy Insights)": [
         ("Deloitte Insights", "https://www.deloitte.com/"),
@@ -256,65 +354,79 @@ def _extract_json(text: str) -> Optional[dict]:
         return None
 
 
-def generate_newsletter_content() -> Dict[str, Any]:
+def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
     """Calls Gemini (grounded with live Google Search) to research and draft
-    this week's issue. Falls back to a minimal safe skeleton on any failure
-    so the pipeline never crashes silently."""
-    api_key = os.getenv("GEMINI_API_KEY")
+    this week's issue.
+
+    Returns (content, success). On ANY failure, success=False and content is
+    None — the caller (run_pipeline) must NOT proceed to build/send a
+    newsletter in that case. We deliberately do not silently substitute
+    placeholder content here any more: a previous version did that and the
+    placeholder text ended up being emailed to the real distribution list,
+    which is a worse outcome than the run simply failing loudly.
+    """
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     if not api_key:
-        log.error("GEMINI_API_KEY missing — using fallback content.")
-        return _fallback_content()
+        log.error(
+            "FATAL: neither GEMINI_API_KEY nor GOOGLE_API_KEY is set in the environment. "
+            "Set one of them as a GitHub Actions secret and expose it to this job's env block."
+        )
+        return None, False
 
     try:
         from google import genai
         from google.genai import types
+    except ImportError as e:
+        log.error(
+            f"FATAL: could not import the 'google-genai' package ({e}). "
+            "It is very likely missing from requirements.txt (or the old, "
+            "end-of-life 'google-generativeai' package is installed instead). "
+            "Fix: add 'google-genai' to requirements.txt and re-run "
+            "`pip install -r requirements.txt`."
+        )
+        return None, False
 
+    try:
         client = genai.Client(api_key=api_key)
         grounding_tool = types.Tool(google_search=types.GoogleSearch())
-        config = types.GenerateContentConfig(
-            tools=[grounding_tool],
-            temperature=0.4,
-        )
+        config = types.GenerateContentConfig(tools=[grounding_tool], temperature=0.4)
         response = client.models.generate_content(
             model=model_name,
             contents=build_research_prompt(),
             config=config,
         )
-        data = _extract_json(response.text)
-        if not data:
-            log.error("Gemini returned unparsable content — using fallback.")
-            return _fallback_content()
-
-        data.setdefault("flashback", {}).setdefault("topic", pick_flashback_topic())
-        return data
-
     except Exception as e:
-        log.error(f"Gemini generation failed: {e}", exc_info=True)
-        return _fallback_content()
+        log.error(
+            f"FATAL: the Gemini API call itself failed ({type(e).__name__}: {e}). "
+            "Common causes: invalid/expired API key, the API key's project has no "
+            "billing/quota enabled, or the model name in GEMINI_MODEL doesn't exist. "
+            "Check https://aistudio.google.com/app/apikey for key status.",
+            exc_info=True,
+        )
+        return None, False
 
+    if not getattr(response, "text", None):
+        log.error(
+            "FATAL: Gemini returned an empty response (no text). This usually means the "
+            "prompt was blocked by a safety filter, or the model returned only a "
+            "function/tool call. Inspect response.candidates in a local debug run."
+        )
+        return None, False
 
-def _fallback_content() -> Dict[str, Any]:
-    """Minimal, honest placeholder used only if the API call fails, so the
-    newsletter still ships (clearly marked) instead of the pipeline dying."""
-    topic = pick_flashback_topic()
-    return {
-        "issue_theme": "تعذر توليد المحتوى الأسبوعي تلقائيًا",
-        "editor_note": "تعذّر الاتصال بخدمة توليد المحتوى هذا الأسبوع. الرجاء مراجعة سجل التنفيذ "
-                        "(logs) والتأكد من صلاحية GEMINI_API_KEY، ثم إعادة تشغيل خط الإنتاج.",
-        "quick_wins": [
-            {"tip_ar": "راجع يدويًا آخر إصدارات IIA وCOSO لهذا الأسبوع ريثما تُحل مشكلة التوليد الآلي."}
-        ],
-        "flashback": {
-            "topic": topic,
-            "content_ar": "سيُستكمل تلقائيًا في العدد القادم.",
-            "key_points": [],
-        },
-        "domain_updates": [],
-        "further_reading": [],
-        "book_recommendation": {"title": "", "author": "", "why_ar": ""},
-    }
+    data = _extract_json(response.text)
+    if not data:
+        log.error(
+            "FATAL: Gemini's response could not be parsed as JSON. Raw response has been "
+            "logged below for debugging — check for extra prose around the JSON object."
+        )
+        log.error(f"Raw Gemini response (first 2000 chars): {response.text[:2000]}")
+        return None, False
+
+    data.setdefault("flashback", {}).setdefault("topic", pick_flashback_topic())
+    log.info(f"Content generated successfully: {len(data.get('domain_updates', []))} domain updates.")
+    return data, True
 
 
 # ============================================================================
@@ -328,19 +440,26 @@ def set_rtl(paragraph):
     pPr.append(bidi)
 
 
-def style_run(run, size=11, bold=False, color=TEXT_DARK, font=FONT_BODY, italic=False):
-    run.font.name = font
+def style_run(run, size=11, bold=False, color=TEXT_DARK, italic=False):
+    """Applies size/weight/colour, and — critically — sets DIFFERENT fonts
+    for the Latin (w:ascii) and Arabic/complex-script (w:cs) glyph ranges
+    within the same run, so mixed Arabic + English-technical-term text
+    renders correctly instead of falling back to a font with no Arabic
+    glyphs (the cause of the "?????" rendering bug)."""
     run.font.size = Pt(size)
     run.font.bold = bold
     run.font.italic = italic
     run.font.color.rgb = RGBColor.from_string(color)
+    run.font.name = FONT_LATIN
     rPr = run._element.get_or_add_rPr()
     rFonts = rPr.find(qn("w:rFonts"))
     if rFonts is None:
         rFonts = OxmlElement("w:rFonts")
         rPr.append(rFonts)
-    rFonts.set(qn("w:cs"), font)
-    rFonts.set(qn("w:eastAsia"), font)
+    rFonts.set(qn("w:ascii"), FONT_LATIN)
+    rFonts.set(qn("w:hAnsi"), FONT_LATIN)
+    rFonts.set(qn("w:cs"), FONT_ARABIC)
+    rFonts.set(qn("w:eastAsia"), FONT_ARABIC)
     return run
 
 
@@ -358,8 +477,10 @@ def add_hyperlink(paragraph, text, url, color=GOLD_ACCENT, underline=True, size=
     rPr = OxmlElement("w:rPr")
 
     rFonts = OxmlElement("w:rFonts")
-    rFonts.set(qn("w:ascii"), FONT_BODY)
-    rFonts.set(qn("w:cs"), FONT_BODY)
+    rFonts.set(qn("w:ascii"), FONT_LATIN)
+    rFonts.set(qn("w:hAnsi"), FONT_LATIN)
+    rFonts.set(qn("w:cs"), FONT_ARABIC)
+    rFonts.set(qn("w:eastAsia"), FONT_ARABIC)
     rPr.append(rFonts)
 
     sz = OxmlElement("w:sz")
@@ -519,7 +640,7 @@ def add_quick_wins(doc, quick_wins: List[Dict[str, str]]):
         return
     header = doc.add_paragraph()
     set_rtl(header)
-    style_run(header.add_run("⚡ انتصارات سريعة (Quick Wins)"), size=13, bold=True, color=NAVY_PRIMARY)
+    style_run(header.add_run("انتصارات سريعة (Quick Wins)"), size=13, bold=True, color=NAVY_PRIMARY)
 
     tbl = doc.add_table(rows=1, cols=1)
     cell = tbl.cell(0, 0)
@@ -539,7 +660,7 @@ def add_quick_wins(doc, quick_wins: List[Dict[str, str]]):
         first = False
         set_rtl(p)
         p.paragraph_format.space_after = Pt(6)
-        style_run(p.add_run("✓  "), size=11, bold=True, color=RISK_COLORS["منخفض"])
+        style_run(p.add_run("— "), size=11, bold=True, color=GOLD_ACCENT)
         style_run(p.add_run(item.get("tip_ar", "")), size=11, color=TEXT_DARK)
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
@@ -549,7 +670,7 @@ def add_flashback(doc, flashback: Dict[str, Any]):
         return
     header = doc.add_paragraph()
     set_rtl(header)
-    style_run(header.add_run(f"🕰️ ومضة إدارية — {flashback.get('topic', '')}"),
+    style_run(header.add_run(f"ومضة إدارية — {flashback.get('topic', '')}"),
               size=13, bold=True, color=NAVY_PRIMARY)
 
     tbl = doc.add_table(rows=1, cols=1)
@@ -576,7 +697,7 @@ def add_flashback(doc, flashback: Dict[str, Any]):
         pk = cell.add_paragraph()
         set_rtl(pk)
         pk.paragraph_format.space_before = Pt(4)
-        style_run(pk.add_run("◆ "), size=10.5, bold=True, color=GOLD_ACCENT)
+        style_run(pk.add_run("— "), size=10.5, bold=True, color=GOLD_ACCENT)
         style_run(pk.add_run(kp), size=10.5, color=TEXT_MUTED)
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
@@ -631,20 +752,20 @@ def add_domain_card(doc, block: Dict[str, Any]):
 
     p1 = cell.paragraphs[0]
     set_rtl(p1)
-    style_run(p1.add_run("🎯 الأثر (Why It Matters): "), size=10.5, bold=True, color=NAVY_PRIMARY)
+    style_run(p1.add_run("الأثر (Why It Matters): "), size=10.5, bold=True, color=NAVY_PRIMARY)
     style_run(p1.add_run(block.get("why_it_matters", "")), size=10.5, color=TEXT_DARK)
 
     p2 = cell.add_paragraph()
     set_rtl(p2)
     p2.paragraph_format.space_before = Pt(4)
-    style_run(p2.add_run("🛠️ إجراءات موصى بها: "), size=10.5, bold=True, color=NAVY_PRIMARY)
+    style_run(p2.add_run("إجراءات موصى بها: "), size=10.5, bold=True, color=NAVY_PRIMARY)
     style_run(p2.add_run(block.get("recommended_actions", "")), size=10.5, color=TEXT_DARK)
 
     if block.get("source_url"):
         p3 = cell.add_paragraph()
         set_rtl(p3)
         p3.paragraph_format.space_before = Pt(4)
-        style_run(p3.add_run("🔗 المصدر: "), size=9.5, bold=True, color=TEXT_MUTED)
+        style_run(p3.add_run("المصدر: "), size=9.5, bold=True, color=TEXT_MUTED)
         add_hyperlink(p3, block.get("source_name", block["source_url"]), block["source_url"], size=9.5)
 
     doc.add_paragraph().paragraph_format.space_after = Pt(10)
@@ -655,7 +776,7 @@ def add_further_reading(doc, items: List[Dict[str, str]], book: Dict[str, str]):
         return
     header = doc.add_paragraph()
     set_rtl(header)
-    style_run(header.add_run("📚 للقراءة هذا الأسبوع (Further Reading)"), size=13, bold=True, color=NAVY_PRIMARY)
+    style_run(header.add_run("للقراءة هذا الأسبوع (Further Reading)"), size=13, bold=True, color=NAVY_PRIMARY)
 
     for it in items:
         p = doc.add_paragraph()
@@ -673,7 +794,7 @@ def add_further_reading(doc, items: List[Dict[str, str]], book: Dict[str, str]):
         add_gold_rule(doc, space_before=8, space_after=6)
         p = doc.add_paragraph()
         set_rtl(p)
-        style_run(p.add_run("📖 كتاب الأسبوع: "), size=11, bold=True, color=NAVY_PRIMARY)
+        style_run(p.add_run("كتاب الأسبوع: "), size=11, bold=True, color=NAVY_PRIMARY)
         style_run(p.add_run(f"{book['title']} — {book.get('author', '')}"), size=11, bold=True, color=TEXT_DARK)
         p2 = doc.add_paragraph()
         set_rtl(p2)
@@ -717,7 +838,7 @@ def build_word_document(content: Dict[str, Any], reports_dir: str = "reports") -
 
     updates_header = doc.add_paragraph()
     set_rtl(updates_header)
-    style_run(updates_header.add_run("📌 أبرز التطورات حسب المجال"), size=13, bold=True, color=NAVY_PRIMARY)
+    style_run(updates_header.add_run("أبرز التطورات حسب المجال"), size=13, bold=True, color=NAVY_PRIMARY)
     add_gold_rule(doc, space_before=2, space_after=8)
 
     for block in content.get("domain_updates", []):
@@ -774,7 +895,7 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
         pts = "".join(f'<li style="margin-bottom:4px;">{_html_escape(k)}</li>' for k in fb.get("key_points", []))
         flashback_html = f"""
         <div style="background:#FFFFFF; border:1px solid #D8D2C2; border-radius:10px; padding:18px 20px; margin-bottom:26px;">
-            <div style="color:#C9A227; font-weight:bold; font-size:13px; margin-bottom:6px;">🕰️ ومضة إدارية — {_html_escape(fb.get('topic',''))}</div>
+            <div style="color:#C9A227; font-weight:bold; font-size:12px; letter-spacing:0.5px; margin-bottom:6px; text-transform:uppercase;">ومضة إدارية — {_html_escape(fb.get('topic',''))}</div>
             <p style="color:#1C2430; font-size:14px; line-height:1.7; margin:0 0 8px 0;">{_html_escape(fb.get('content_ar',''))}</p>
             <ul style="margin:0; padding-right:18px; color:#5B6472; font-size:13px;">{pts}</ul>
         </div>"""
@@ -787,7 +908,7 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
         if block.get("source_url"):
             source_html = (
                 f'<a href="{block["source_url"]}" style="color:#13294B; font-size:12px; text-decoration:underline;">'
-                f'🔗 {_html_escape(block.get("source_name", "المصدر"))}</a>'
+                f'المصدر: {_html_escape(block.get("source_name", ""))}</a>'
             )
         cards_html += f"""
         <div style="background:#ffffff; border:1px solid #D8D2C2; border-radius:10px; margin-bottom:20px; overflow:hidden;">
@@ -801,9 +922,9 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
                 <div style="font-weight:bold; color:#13294B; font-size:13.5px; margin-bottom:6px;">{_html_escape(block.get('title',''))}</div>
                 <p style="color:#1C2430; font-size:13.5px; line-height:1.7; margin:0 0 10px 0;">{_html_escape(block.get('summary',''))}</p>
                 <div style="background:#FBF9F4; border-right:3px solid #C9A227; padding:10px 14px; border-radius:4px;">
-                    <div style="margin-bottom:6px;"><strong style="color:#13294B; font-size:12.5px;">🎯 الأثر:</strong>
+                    <div style="margin-bottom:6px;"><strong style="color:#13294B; font-size:12.5px;">الأثر:</strong>
                     <span style="color:#334155; font-size:12.5px;"> {_html_escape(block.get('why_it_matters',''))}</span></div>
-                    <div><strong style="color:#13294B; font-size:12.5px;">🛠️ إجراءات:</strong>
+                    <div><strong style="color:#13294B; font-size:12.5px;">إجراءات:</strong>
                     <span style="color:#334155; font-size:12.5px;"> {_html_escape(block.get('recommended_actions',''))}</span></div>
                 </div>
                 <div style="margin-top:10px;">{source_html}</div>
@@ -824,7 +945,7 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
     if book and book.get("title"):
         book_html = f"""
         <div style="border-top:1px solid #D8D2C2; margin-top:14px; padding-top:14px;">
-            <div style="color:#13294B; font-weight:bold; font-size:13.5px;">📖 كتاب الأسبوع: {_html_escape(book['title'])} — {_html_escape(book.get('author',''))}</div>
+            <div style="color:#13294B; font-weight:bold; font-size:13.5px;">كتاب الأسبوع: {_html_escape(book['title'])} — {_html_escape(book.get('author',''))}</div>
             <p style="color:#5B6472; font-size:12.5px; font-style:italic; margin:6px 0 0 0;">{_html_escape(book.get('why_ar',''))}</p>
         </div>"""
 
@@ -845,19 +966,19 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
 
     <div style="padding:20px 0 0 0;">
       <div style="background:#FBF9F4; border-right:4px solid #C9A227; border-radius:8px; padding:16px 20px; margin-bottom:26px; text-align:right;">
-        <div style="color:#13294B; font-weight:bold; font-size:14px; margin-bottom:8px;">⚡ انتصارات سريعة</div>
+        <div style="color:#13294B; font-weight:bold; font-size:14px; margin-bottom:8px;">انتصارات سريعة</div>
         <ul style="margin:0; padding-right:18px; font-size:13.5px;">{quick_wins_html}</ul>
       </div>
 
       <div style="text-align:right;">{flashback_html}</div>
 
       <div style="text-align:right;">
-        <div style="color:#13294B; font-weight:bold; font-size:15px; margin-bottom:14px; border-bottom:2px solid #C9A227; padding-bottom:6px;">📌 أبرز التطورات حسب المجال</div>
+        <div style="color:#13294B; font-weight:bold; font-size:15px; margin-bottom:14px; border-bottom:2px solid #C9A227; padding-bottom:6px;">أبرز التطورات حسب المجال</div>
         {cards_html}
       </div>
 
       <div style="background:#ffffff; border:1px solid #D8D2C2; border-radius:10px; padding:18px 20px; text-align:right;">
-        <div style="color:#13294B; font-weight:bold; font-size:14px; margin-bottom:10px;">📚 للقراءة هذا الأسبوع</div>
+        <div style="color:#13294B; font-weight:bold; font-size:14px; margin-bottom:10px;">للقراءة هذا الأسبوع</div>
         <ul style="margin:0; padding-right:18px;">{reading_html}</ul>
         {book_html}
       </div>
@@ -888,7 +1009,11 @@ def send_email_report(html_content: str, report_filepath: str, issue_theme: str,
         raise ValueError("Missing required SMTP environment variables.")
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"العدد {issue_no} | {issue_theme} — {datetime.now().strftime('%Y-%m-%d')}"
+    subject_text = f"العدد {issue_no} | {issue_theme} — {datetime.now().strftime('%Y-%m-%d')}"
+    # Explicit RFC 2047 header encoding: without this, some mail transfer
+    # agents mangle non-ASCII Subject headers (a classic cause of Arabic
+    # text turning into "?" specifically in the subject line).
+    msg["Subject"] = Header(subject_text, "utf-8")
     msg["From"] = sender_email
     msg["To"] = ", ".join(recipient_emails)
     msg.attach(MIMEText(html_content, "html", "utf-8"))
@@ -924,8 +1049,17 @@ def send_email_report(html_content: str, report_filepath: str, issue_theme: str,
 # 9. PIPELINE
 # ============================================================================
 def run_pipeline():
+    log.info("Step 0/4 — Verifying required fonts are installed...")
+    verify_fonts_installed()
+
     log.info("Step 1/4 — Researching & drafting content with Gemini (grounded search)...")
-    content = generate_newsletter_content()
+    content, ok = generate_newsletter_content()
+    if not ok:
+        log.error(
+            "Pipeline STOPPED before building or sending anything. "
+            "See the FATAL log line above for the exact cause. No email was sent."
+        )
+        sys.exit(1)
 
     log.info("Step 2/4 — Building luxury Word document...")
     docx_filepath = build_word_document(content, reports_dir="reports")
