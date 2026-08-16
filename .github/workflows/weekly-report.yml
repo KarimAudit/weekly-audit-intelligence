@@ -14,7 +14,7 @@ jobs:
     env:
       SENDER_EMAIL: ${{ secrets.SMTP_USER }}
       SENDER_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-      RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+      RECIPIENT_EMAILS: ${{ vars.RECIPIENT_EMAILS }}
       SMTP_SERVER: smtp.gmail.com
       SMTP_PORT: "465"
 
