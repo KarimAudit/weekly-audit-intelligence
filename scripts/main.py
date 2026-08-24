@@ -125,47 +125,31 @@ def next_issue_number() -> int:
 # ============================================================================
 # 2. مكتبة المصادر الموثوقة (توجّه بحث Gemini)
 # ============================================================================
+# القائمة مُختصرة عمدًا (أهم 2-3 مصادر لكل مجال) لتقليل عدد استعلامات
+# البحث (grounding queries) التي يولّدها كل طلب — كل مصدر إضافي يرفع
+# احتمال استهلاك حصة الحساب المجانية (Free Tier) بسرعة أكبر.
 SOURCES = {
     "تدقيق داخلي وأداء (Internal / Performance Audit)": [
         ("IIA - The Institute of Internal Auditors", "https://www.theiia.org/"),
         ("INTOSAI", "https://www.intosai.org/"),
-        ("ISSAI - INTOSAI Standards", "https://www.issai.org/"),
-        ("ECIIA - European Confederation of Institutes of Internal Auditing", "https://www.eciia.eu/"),
-        ("NAO UK", "https://www.nao.org.uk"),
         ("GAO US", "https://www.gao.gov"),
-        ("AuditNet", "https://www.auditnet.org"),
-        ("Internal Audit 360", "https://www.internalaudit360.com"),
-        ("IIA Australia", "https://www.iia.org.au"),
-        ("Saudi Internal Audit Association", "https://www.saia.gov.sa"),
     ],
     "الحوكمة والقطاع العام (Governance / Public Sector)": [
         ("OECD Public Governance", "https://www.oecd.org/governance/"),
         ("World Bank Governance", "https://www.worldbank.org/"),
-        ("LSE - London School of Economics", "https://www.lse.ac.uk"),
-        ("ICGN - International Corporate Governance Network", "https://www.icgn.org/"),
-        ("Transparency International", "https://www.transparency.org/"),
-        ("Ash Center for Democratic Governance, Harvard Kennedy School", "https://ash.harvard.edu/"),
     ],
     "الرقابة الداخلية وإدارة المخاطر (Internal Control / Risk / COSO)": [
         ("COSO", "https://www.coso.org/"),
         ("IFAC", "https://www.ifac.org/"),
-        ("Protiviti", "https://www.protiviti.com"),
-        ("ISO 31000 - Risk Management", "https://www.iso.org/standards/popular/iso-31000-family"),
-        ("GARP - Global Association of Risk Professionals", "https://www.garp.org/"),
-        ("FERMA - Federation of European Risk Management Associations", "https://ferma.eu/"),
     ],
     "الموارد البشرية (HR)": [
         ("SHRM - Society for Human Resource Management", "https://www.shrm.org/"),
-        ("CIPD - Chartered Institute of Personnel and Development", "https://www.cipd.org/"),
     ],
     "المحاسبة الإدارية (Management Accounting)": [
         ("IMA - Institute of Management Accountants", "https://www.imanet.org/"),
     ],
     "استشارات وأفضل الممارسات (Big Four / Strategy Insights)": [
         ("Deloitte Insights", "https://www.deloitte.com/"),
-        ("EY Insights", "https://www.ey.com/"),
-        ("KPMG Insights", "https://kpmg.com/"),
-        ("PwC Insights", "https://www.pwc.com/"),
         ("McKinsey", "https://www.mckinsey.com"),
         ("Harvard Business Review", "https://hbr.org"),
     ],
@@ -248,6 +232,9 @@ RESPONSE_SCHEMA_HINT = """
 - استخدم فقط أخبارًا وتطورات حقيقية وحديثة (لا تختلق حقائق)، واستشهد بروابط قابلة للفتح فعليًا من نتائج البحث.
 - لا تكرر نفس الخبر في أكثر من مجال.
 - اجعل اللهجة عملية ومباشرة (hands-on)، بلا حشو إنشائي.
+- اقتصد في البحث: أجرِ 6-8 استعلامات بحث كحد أقصى إجمالًا (وليس لكل مصدر
+  استعلام منفصل)، اختر الاستعلامات الأوسع تغطية بدل تكرار البحث لكل مصدر
+  على حدة.
 """
 
 
@@ -302,13 +289,19 @@ def _call_gemini_with_fallback(client, types, prompt: str, primary_model: str):
     وإن استمر الفشل ينتقل لموديل احتياطي بدل إيقاف الـ pipeline بالكامل."""
     fallbacks = [
         m.strip() for m in os.getenv(
-            "GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash,gemini-3.1-flash-lite"
+            "GEMINI_MODEL_FALLBACKS", "gemini-3.1-flash-lite,gemini-3.6-flash-lite"
         ).split(",") if m.strip()
     ]
     models_to_try = [primary_model] + [m for m in fallbacks if m != primary_model]
 
     grounding_tool = types.Tool(google_search=types.GoogleSearch())
-    config = types.GenerateContentConfig(tools=[grounding_tool], temperature=0.4)
+    # يحد عدد استعلامات البحث الفعلية (AFC) إلى 6 كحد أقصى بدل الافتراضي 10،
+    # تماشيًا مع تقليص عدد المصادر وقاعدة "6-8 استعلامات" في الـ prompt.
+    config = types.GenerateContentConfig(
+        tools=[grounding_tool],
+        temperature=0.4,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=6),
+    )
 
     last_error = None
     for model_name in models_to_try:
