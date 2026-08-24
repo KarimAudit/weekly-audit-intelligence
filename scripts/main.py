@@ -116,16 +116,16 @@ def next_issue_number() -> int:
 # ============================================================================
 SOURCES = {
     "تدقيق داخلي وأداء (Internal / Performance Audit)": [
-        ("IIA", "https://www.theiia.org/"), 
-        ("INTOSAI", "https://www.intosai.org/"), 
+        ("IIA", "https://www.theiia.org/"),
+        ("INTOSAI", "https://www.intosai.org/"),
         ("GAO US", "https://www.gao.gov"),
     ],
     "الحوكمة والقطاع العام (Governance / Public Sector)": [
-        ("OECD", "https://www.oecd.org/governance/"), 
+        ("OECD", "https://www.oecd.org/governance/"),
         ("World Bank", "https://www.worldbank.org/"),
     ],
     "الرقابة الداخلية وإدارة المخاطر (Internal Control / Risk / COSO)": [
-        ("COSO", "https://www.coso.org/"), 
+        ("COSO", "https://www.coso.org/"),
         ("IFAC", "https://www.ifac.org/"),
     ],
     "الموارد البشرية (HR)": [
@@ -135,8 +135,8 @@ SOURCES = {
         ("IMA", "https://www.imanet.org/")
     ],
     "استشارات وأفضل الممارسات (Big Four / Strategy Insights)": [
-        ("Deloitte", "https://www.deloitte.com/"), 
-        ("McKinsey", "https://www.mckinsey.com"), 
+        ("Deloitte", "https://www.deloitte.com/"),
+        ("McKinsey", "https://www.mckinsey.com"),
         ("HBR", "https://hbr.org"),
     ],
 }
@@ -171,6 +171,33 @@ def pick_flashback_topic() -> str:
 # 3. توليد المحتوى — Tavily Search + OpenAI-Compatible LLMs (GLM/DeepSeek)
 # ============================================================================
 
+def _request_with_retries(method: str, url: str, max_retries: int = 3, backoff_base: float = 2.0, **kwargs):
+    """
+    غلاف صغير حول requests يعيد المحاولة مع backoff أسّي عند أخطاء الشبكة
+    المؤقتة أو أكواد 429/5xx، بدل ما يفشل الـ pipeline كله من أول عثرة اتصال.
+    """
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.request(method, url, **kwargs)
+            if resp.status_code == 429 or resp.status_code >= 500:
+                log.warning(f"محاولة {attempt}/{max_retries}: كود {resp.status_code} من {url} — إعادة محاولة...")
+                last_exc = requests.HTTPError(f"HTTP {resp.status_code}")
+                if attempt < max_retries:
+                    time.sleep(backoff_base ** attempt)
+                    continue
+                resp.raise_for_status()
+            return resp
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            log.warning(f"محاولة {attempt}/{max_retries} فشلت لـ {url}: {e}")
+            if attempt < max_retries:
+                time.sleep(backoff_base ** attempt)
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"فشل الطلب إلى {url} لأسباب غير معروفة.")
+
+
 def search_with_tavily(domains: List[str]) -> str:
     """يستخدم Tavily API للبحث الفعلي عن أحدث التطورات لكل مجال."""
     api_key = os.getenv("TAVILY_API_KEY")
@@ -193,26 +220,32 @@ def search_with_tavily(domains: List[str]) -> str:
         }
         try:
             log.info(f"Tavily searching for: {domain}...")
-            response = requests.post(url, json=payload, timeout=30)
+            response = _request_with_retries("POST", url, json=payload, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
+
             domain_context = f"### نتائج البحث لـ {domain}:\n"
             if data.get("answer"):
                 domain_context += f"ملخص عام: {data['answer']}\n"
-            
+
             for res in data.get("results", []):
                 title = res.get("title", "")
-                url = res.get("url", "")
-                content = res.get("content", "")[:500] # تقليل الحجم لتوفير الـ Tokens
-                domain_context += f"- العنوان: {title}\n  الرابط: {url}\n  المحتوى: {content}\n"
-            
+                res_url = res.get("url", "")
+                content = res.get("content", "")[:500]  # تقليل الحجم لتوفير الـ Tokens
+                domain_context += f"- العنوان: {title}\n  الرابط: {res_url}\n  المحتوى: {content}\n"
+
             all_context.append(domain_context)
         except Exception as e:
             log.error(f"فشل البحث في Tavily لمجال {domain}: {e}")
             all_context.append(f"### نتائج البحث لـ {domain}:\n(تعذر جلب النتائج)\n")
 
-    return "\n\n".join(all_context)
+    combined = "\n\n".join(all_context)
+    # لو كل المجالات فشلت (كل الـ context "تعذر جلب النتائج")، أوقف الـ pipeline
+    # بدل ما نبعث للـ LLM سياق فاضي يخليه يهلوس أخبار.
+    if all(("تعذر جلب النتائج" in c) for c in all_context):
+        log.error("FATAL: فشل البحث في كل المجالات الثمانية — لا يوجد سياق حقيقي لإرساله للـ LLM.")
+        return ""
+    return combined
 
 
 def generate_with_llm(prompt: str) -> Optional[str]:
@@ -238,7 +271,7 @@ def generate_with_llm(prompt: str) -> Optional[str]:
 
     url = f"{base_url}/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    
+
     # إجبار النموذج على إرجاع JSON صرف
     payload = {
         "model": model,
@@ -247,21 +280,22 @@ def generate_with_llm(prompt: str) -> Optional[str]:
         "response_format": {"type": "json_object"}
     }
 
+    response = None  # مُعرّف مسبقًا حتى لا ينفجر الـ except لو فشل الطلب قبل استلام أي رد
     try:
         log.info(f"Generating content with {provider}/{model}...")
-        response = requests.post(url, json=payload, headers=headers, timeout=90)
+        response = _request_with_retries("POST", url, json=payload, headers=headers, timeout=90)
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
         log.error(f"FATAL: فشل استدعاء نموذج التوليد ({type(e).__name__}): {e}")
-        if response:
-            log.error(f"Response Body: {response.text}")
+        if response is not None:
+            log.error(f"Response Body: {response.text[:2000]}")
         return None
 
 
 def build_generation_prompt(search_context: str) -> str:
     flashback_topic = pick_flashback_topic()
-    
+
     return f"""أنت محرر تنفيذي متخصص في التدقيق الداخلي والحوكمة وإدارة المخاطر، تُعِدّ نشرة أسبوعية
 احترافية لجمهور من كبار المدققين والمسؤولين الحكوميين والماليين التنفيذيين. مستوى الجودة
 المطلوب أعلى من نشرات Deloitte وMcKinsey وHBR: مكثف، عملي، بلا حشو، بقيمة مضافة حقيقية.
@@ -317,7 +351,7 @@ def build_generation_prompt(search_context: str) -> str:
     "author": "اسم المؤلف",
     "why_ar": "لماذا يستحق القراءة هذا الأسبوع تحديدًا (جملتان)"
   }}
-}
+}}
 
 قواعد إلزامية:
 - اكتب المحتوى بالعربية الفصحى الاحترافية، وضع كل مصطلح تقني بالإنجليزية بين قوسين.
@@ -339,9 +373,28 @@ def _extract_json(text: str) -> Optional[dict]:
         return None
 
 
+def _validate_content_shape(data: dict) -> bool:
+    """
+    تحقق دفاعي بسيط: تأكد إن المفاتيح الأساسية اللي باقي السكربت (DOCX/PDF/HTML)
+    يعتمد عليها موجودة، حتى لو القيم فاضية، بدل ما ينهار لاحقًا بـ KeyError غامض.
+    """
+    required_keys = [
+        "issue_theme", "editor_note", "quick_wins", "flashback",
+        "domain_updates", "further_reading", "book_recommendation",
+    ]
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        log.error(f"استجابة LLM ناقصة المفاتيح التالية: {missing}")
+        return False
+    if not isinstance(data.get("domain_updates"), list) or not data["domain_updates"]:
+        log.error("حقل domain_updates فاضي أو ليس قائمة — لا فائدة من نشرة بدون تحديثات.")
+        return False
+    return True
+
+
 def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
     """يبني المحتوى بالكامل: بحث Tavily ثم توليد LLM."""
-    
+
     # 1. البحث الفعلي
     search_context = search_with_tavily(DOMAINS)
     if not search_context:
@@ -351,7 +404,7 @@ def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
     # 2. توليد JSON
     prompt = build_generation_prompt(search_context)
     raw_response = generate_with_llm(prompt)
-    
+
     if not raw_response:
         return None, False
 
@@ -362,6 +415,10 @@ def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
         return None, False
 
     data.setdefault("flashback", {}).setdefault("topic", pick_flashback_topic())
+
+    if not _validate_content_shape(data):
+        return None, False
+
     log.info(f"Content generated successfully: {len(data.get('domain_updates', []))} domain updates.")
     return data, True
 
