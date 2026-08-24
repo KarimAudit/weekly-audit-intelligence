@@ -388,21 +388,58 @@ def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
         )
         return None, False
 
+def _is_quota_or_rate_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return "RESOURCE_EXHAUSTED" in msg or " 429" in msg or "'code': 429" in msg
+
+
+def _call_gemini_with_fallback(client, types, prompt: str, primary_model: str):
+    """يجرّب الموديل الأساسي، وعند 429/quota ينتظر قليلاً (لاحتمال أنه
+    حد دقيقة عابر) ثم يعيد المحاولة مرة، وإن استمر الفشل ينتقل لموديل
+    احتياطي بدل إيقاف الـ pipeline بالكامل."""
+    fallbacks = [
+        m.strip() for m in os.getenv(
+            "GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash,gemini-3.1-flash-lite"
+        ).split(",") if m.strip()
+    ]
+    models_to_try = [primary_model] + [m for m in fallbacks if m != primary_model]
+
+    grounding_tool = types.Tool(google_search=types.GoogleSearch())
+    config = types.GenerateContentConfig(tools=[grounding_tool], temperature=0.4)
+
+    last_error = None
+    for model_name in models_to_try:
+        for attempt in range(2):
+            try:
+                log.info(f"Attempting generation with model '{model_name}' (try {attempt + 1})...")
+                return client.models.generate_content(
+                    model=model_name, contents=prompt, config=config,
+                ), model_name
+            except Exception as e:
+                last_error = e
+                if _is_quota_or_rate_error(e):
+                    if attempt == 0:
+                        log.warning(f"'{model_name}' hit 429 ({e}); waiting 20s then retrying once...")
+                        time.sleep(20)
+                        continue
+                    log.warning(f"'{model_name}' still failing after retry — trying next fallback model.")
+                    break
+                log.error(f"Non-quota error on '{model_name}': {e}")
+                break
+    raise last_error
+
+
     try:
         client = genai.Client(api_key=api_key)
-        grounding_tool = types.Tool(google_search=types.GoogleSearch())
-        config = types.GenerateContentConfig(tools=[grounding_tool], temperature=0.4)
-        response = client.models.generate_content(
-            model=model_name,
-            contents=build_research_prompt(),
-            config=config,
-        )
+        response, used_model = _call_gemini_with_fallback(client, types, build_research_prompt(), model_name)
+        log.info(f"Content generated successfully using model: {used_model}")
     except Exception as e:
         log.error(
-            f"FATAL: the Gemini API call itself failed ({type(e).__name__}: {e}). "
-            "Common causes: invalid/expired API key, the API key's project has no "
-            "billing/quota enabled, or the model name in GEMINI_MODEL doesn't exist. "
-            "Check https://aistudio.google.com/app/apikey for key status.",
+            f"FATAL: the Gemini API call failed on every model tried "
+            f"({type(e).__name__}: {e}). Common causes: invalid/expired API key, "
+            f"the API key's project has no billing/quota enabled, or none of the "
+            f"model names have available quota. Check https://aistudio.google.com/app/apikey "
+            f"and https://ai.dev/rate-limit for project status.",
             exc_info=True,
         )
         return None, False
