@@ -82,7 +82,10 @@ RISK_COLORS = {
 FONT_ARABIC = "Amiri"
 FONT_LATIN = "Carlito"
 
-ISSUE_NO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".issue_number")
+ISSUE_NO_FILE = os.path.join(os.getcwd(), ".issue_number")
+# ملاحظة: بيُكتب في مجلد التشغيل الحالي (جذر الـ repo عند تشغيله كـ
+# "python scripts/main.py" من GitHub Actions) عمدًا، وليس بجانب هذا
+# الملف، عشان يطابق أمر "git add .issue_number" في الـ workflow.
 
 def verify_fonts_installed():
     for font_name, apt_pkg in [(FONT_ARABIC, "fonts-hosny-amiri"), (FONT_LATIN, "fonts-crosextra-carlito")]:
@@ -141,6 +144,18 @@ SOURCES = {
     ],
 }
 
+# نطاقات مجرّدة (بدون https:// أو www.) لاستخدامها مباشرة مع بارامتر
+# include_domains في Tavily. لازم تكون مطابقة فعليًا لأسماء النطاقات في
+# SOURCES أعلاه — لو غيّرت مصدر هناك، حدّث هنا كمان.
+TRUSTED_DOMAINS_BY_CATEGORY = {
+    "تدقيق داخلي وأداء": ["theiia.org", "intosai.org", "gao.gov"],
+    "الحوكمة والقطاع العام": ["oecd.org", "worldbank.org"],
+    "الرقابة الداخلية وإدارة المخاطر": ["coso.org", "ifac.org"],
+    "الموارد البشرية": ["shrm.org"],
+    "المحاسبة الإدارية": ["imanet.org"],
+    "استشارات وأفضل الممارسات": ["deloitte.com", "mckinsey.com", "hbr.org"],
+}
+
 DOMAINS = [
     "التدقيق الداخلي (Internal Audit)",
     "تدقيق الأداء (Performance Audit)",
@@ -151,6 +166,24 @@ DOMAINS = [
     "المحاسبة الإدارية (Management Accounting)",
     "إصلاح وتحول القطاع العام (Public Sector Reform)",
 ]
+
+# ربط كل مجال من المجالات الثمانية بفئة (أو أكثر) من TRUSTED_DOMAINS_BY_CATEGORY
+# — هذا هو الربط الفعلي المفقود سابقًا بين قائمة المصادر الموثوقة واستعلامات البحث.
+DOMAIN_TO_SOURCE_CATEGORIES = {
+    DOMAINS[0]: ["تدقيق داخلي وأداء"],                                    # التدقيق الداخلي
+    DOMAINS[1]: ["تدقيق داخلي وأداء"],                                    # تدقيق الأداء
+    DOMAINS[2]: ["الحوكمة والقطاع العام"],                                # الحوكمة
+    DOMAINS[3]: ["الرقابة الداخلية وإدارة المخاطر"],                       # الرقابة الداخلية
+    DOMAINS[4]: ["الرقابة الداخلية وإدارة المخاطر"],                       # إدارة المخاطر
+    DOMAINS[5]: ["الموارد البشرية"],                                      # الموارد البشرية
+    DOMAINS[6]: ["المحاسبة الإدارية"],                                    # المحاسبة الإدارية
+    DOMAINS[7]: ["الحوكمة والقطاع العام", "استشارات وأفضل الممارسات"],     # إصلاح القطاع العام
+}
+
+# نطاقات مخصصة لقسم "للقراءة هذا الأسبوع" — تُستخدم في بحث منفصل لضمان إن
+# further_reading مبني على نتائج بحث حقيقية من Deloitte/McKinsey/HBR بدل ما
+# يكون توليدًا حرًا من الموديل (كان السبب الرئيسي لضعف هذا القسم سابقًا).
+FURTHER_READING_DOMAINS = TRUSTED_DOMAINS_BY_CATEGORY["استشارات وأفضل الممارسات"]
 
 FLASHBACK_TOPICS = [
     "إطار COSO للرقابة الداخلية (COSO Internal Control Framework)",
@@ -198,54 +231,114 @@ def _request_with_retries(method: str, url: str, max_retries: int = 3, backoff_b
     raise RuntimeError(f"فشل الطلب إلى {url} لأسباب غير معروفة.")
 
 
+def _flatten_trusted_domains(categories: List[str]) -> List[str]:
+    seen = []
+    for cat in categories:
+        for d in TRUSTED_DOMAINS_BY_CATEGORY.get(cat, []):
+            if d not in seen:
+                seen.append(d)
+    return seen
+
+
+def _tavily_search_call(api_key: str, query: str, include_domains: Optional[List[str]] = None,
+                         max_results: int = 4, topic: str = "general") -> dict:
+    payload = {
+        "api_key": api_key,
+        "query": query,
+        "search_depth": "advanced",
+        "topic": topic,          # "general" (وليس "news") لأن المصادر المؤسسية
+                                  # (IIA, COSO, IFAC...) غالبًا غير مصنّفة كأخبار،
+                                  # وفهرس الأخبار في Tavily كان يتجاهلها فعليًا.
+        "time_range": "month",   # يعوّض عن topic="news" في تحديد الحداثة
+        "max_results": max_results,
+        "include_answer": True,
+    }
+    if include_domains:
+        payload["include_domains"] = include_domains
+    url = "https://api.tavily.com/search"
+    response = _request_with_retries("POST", url, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def _format_search_results(data: dict, header: str) -> str:
+    ctx = f"### {header}:\n"
+    if data.get("answer"):
+        ctx += f"ملخص عام: {data['answer']}\n"
+    for res in data.get("results", []):
+        title = res.get("title", "")
+        res_url = res.get("url", "")
+        content = res.get("content", "")[:500]  # تقليل الحجم لتوفير الـ Tokens
+        ctx += f"- العنوان: {title}\n  الرابط: {res_url}\n  المحتوى: {content}\n"
+    return ctx
+
+
 def search_with_tavily(domains: List[str]) -> str:
-    """يستخدم Tavily API للبحث الفعلي عن أحدث التطورات لكل مجال."""
+    """
+    يستخدم Tavily API للبحث الفعلي عن أحدث التطورات لكل مجال، مقيّدًا بالنطاقات
+    الموثوقة المحددة في TRUSTED_DOMAINS_BY_CATEGORY. لو البحث المقيّد رجع بدون
+    نتائج (المصادر المؤسسية أحيانًا محدودة الفهرسة لموضوع بعينه هذا الشهر)،
+    يتم عمل بحث احتياطي أوسع مع تحذير واضح في الـ log، بدل ما يفشل المجال بالكامل.
+    """
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         log.error("FATAL: TAVILY_API_KEY غير موجود في البيئة.")
         return ""
 
-    url = "https://api.tavily.com/search"
     all_context = []
+    any_success = False
 
     for domain in domains:
-        # تخصيص الاستعلام لجلب الأخبار الأحدث
-        payload = {
-            "api_key": api_key,
-            "query": f"أحدث التطورات وأخبار {domain} هذا الشهر",
-            "search_depth": "advanced",
-            "topic": "news",
-            "max_results": 3,
-            "include_answer": True
-        }
+        categories = DOMAIN_TO_SOURCE_CATEGORIES.get(domain, [])
+        include_domains = _flatten_trusted_domains(categories)
+        query = f"أحدث التطورات والمستجدات في {domain}"
         try:
-            log.info(f"Tavily searching for: {domain}...")
-            response = _request_with_retries("POST", url, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
+            log.info(f"Tavily searching (مقيّد بالمصادر الموثوقة {include_domains}): {domain}...")
+            data = _tavily_search_call(api_key, query, include_domains=include_domains, max_results=4)
 
-            domain_context = f"### نتائج البحث لـ {domain}:\n"
-            if data.get("answer"):
-                domain_context += f"ملخص عام: {data['answer']}\n"
+            if not data.get("results"):
+                log.warning(
+                    f"لا نتائج من المصادر الموثوقة لمجال '{domain}' خلال آخر شهر. "
+                    f"إجراء بحث احتياطي أوسع (غير مقيّد بالنطاقات المتفق عليها)..."
+                )
+                data = _tavily_search_call(api_key, query, include_domains=None, max_results=4)
+                header = f"نتائج البحث لـ {domain} (تنبيه: بحث احتياطي عام، ليس من المصادر المتفق عليها)"
+            else:
+                header = f"نتائج البحث لـ {domain} (من المصادر الموثوقة: {', '.join(include_domains)})"
 
-            for res in data.get("results", []):
-                title = res.get("title", "")
-                res_url = res.get("url", "")
-                content = res.get("content", "")[:500]  # تقليل الحجم لتوفير الـ Tokens
-                domain_context += f"- العنوان: {title}\n  الرابط: {res_url}\n  المحتوى: {content}\n"
-
-            all_context.append(domain_context)
+            all_context.append(_format_search_results(data, header))
+            if data.get("results"):
+                any_success = True
         except Exception as e:
             log.error(f"فشل البحث في Tavily لمجال {domain}: {e}")
             all_context.append(f"### نتائج البحث لـ {domain}:\n(تعذر جلب النتائج)\n")
 
-    combined = "\n\n".join(all_context)
-    # لو كل المجالات فشلت (كل الـ context "تعذر جلب النتائج")، أوقف الـ pipeline
-    # بدل ما نبعث للـ LLM سياق فاضي يخليه يهلوس أخبار.
-    if all(("تعذر جلب النتائج" in c) for c in all_context):
-        log.error("FATAL: فشل البحث في كل المجالات الثمانية — لا يوجد سياق حقيقي لإرساله للـ LLM.")
+    # بحث منفصل مخصص لقسم "للقراءة هذا الأسبوع" من مصادر Deloitte/McKinsey/HBR
+    # تحديدًا، بدل ما يعتمد الموديل على توليد حر بلا سياق بحثي حقيقي.
+    try:
+        log.info(f"Tavily searching for further-reading sources: {FURTHER_READING_DOMAINS}...")
+        fr_data = _tavily_search_call(
+            api_key,
+            "أحدث المقالات والتقارير في التدقيق الداخلي والحوكمة وإدارة المخاطر",
+            include_domains=FURTHER_READING_DOMAINS,
+            max_results=4,
+        )
+        if fr_data.get("results"):
+            all_context.append(_format_search_results(
+                fr_data, f"مصادر مخصصة لقسم further_reading (من: {', '.join(FURTHER_READING_DOMAINS)})"
+            ))
+            any_success = True
+        else:
+            log.warning("لا نتائج حديثة من مصادر further_reading الموثوقة هذا الشهر.")
+    except Exception as e:
+        log.error(f"فشل بحث further_reading: {e}")
+
+    if not any_success:
+        log.error("FATAL: فشل البحث في كل المجالات (المقيّدة والاحتياطية) — لا يوجد سياق حقيقي لإرساله للـ LLM.")
         return ""
-    return combined
+
+    return "\n\n".join(all_context)
+
 
 
 def generate_with_llm(prompt: str) -> Optional[str]:
@@ -319,15 +412,26 @@ def build_generation_prompt(search_context: str) -> str:
 احترافية لجمهور من كبار المدققين والمسؤولين الحكوميين والماليين التنفيذيين. مستوى الجودة
 المطلوب أعلى من نشرات Deloitte وMcKinsey وHBR: مكثف، عملي، بلا حشو، بقيمة مضافة حقيقية.
 
-تم جلب نتائج بحث فعلية وحديثة من الإنترنت. مهمتك هي قراءتها وتنظيمها في النشرة الأسبوعية.
-لا تقم باختلاق أي أخبار أو روابط غير موجودة في الـ Context المرفق.
+تم جلب نتائج بحث فعلية وحديثة من الإنترنت، بعضها من مصادر مهنية موثوقة محددة
+مسبقًا (IIA, INTOSAI, GAO, OECD, World Bank, COSO, IFAC, SHRM, IMA, Deloitte,
+McKinsey, HBR) وبعضها الآخر بحث احتياطي عام (مُعلَّم بوضوح في العنوان لو كان كذلك).
+مهمتك هي قراءتها وتنظيمها في النشرة الأسبوعية. لا تقم باختلاق أي أخبار أو روابط
+غير موجودة في الـ Context المرفق، ولا تستبدل رابطًا حقيقيًا من الـ Context برابط
+من معرفتك العامة.
 
 === نتائج البحث من الإنترنت (Search Context) ===
 {search_context}
 ================================================
 
-غطِّ المجالات التالية واختر الأهم:
+غطِّ المجالات التالية واختر الأهم من نتائج البحث الموسومة بها (فضّل دائمًا
+النتائج القادمة من "المصادر الموثوقة" على النتائج القادمة من "بحث احتياطي عام"
+لو كان الاثنان متاحين لنفس المجال):
 {chr(10).join(f'- {d}' for d in DOMAINS)}
+
+لقسم further_reading تحديدًا: استخدم فقط النتائج الموجودة تحت القسم المعنون
+"مصادر مخصصة لقسم further_reading" في الـ Context أعلاه (من Deloitte/McKinsey/HBR).
+لو هذا القسم فاضي أو غير موجود في الـ Context، أعد further_reading كقائمة فارغة []
+بدل اختلاق عناصر غير موجودة فعليًا في نتائج البحث.
 
 موضوع "ومضة إدارية" (Flashback) لهذا الأسبوع هو: {flashback_topic}
 اشرحه بإيجاز عملي بناءً على معرفتك العامة.
