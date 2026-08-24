@@ -272,20 +272,39 @@ def generate_with_llm(prompt: str) -> Optional[str]:
     url = f"{base_url}/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
+    # max_tokens صريح ومرتفع: بدون تحديده بعض المزودين (خصوصًا GLM) بيستخدموا حد
+    # افتراضي صغير نسبيًا، فالرد بيتقطع في نص الـ JSON (عادة قبل آخر حقلين
+    # further_reading و book_recommendation لأنهم آخر شيء في الهيكل). قابل
+    # للتعديل عبر متغير بيئي LLM_MAX_TOKENS لو احتجت رفعه أكتر.
+    max_tokens = int(os.getenv("LLM_MAX_TOKENS", "6000"))
+
     # إجبار النموذج على إرجاع JSON صرف
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.4,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"}
     }
 
     response = None  # مُعرّف مسبقًا حتى لا ينفجر الـ except لو فشل الطلب قبل استلام أي رد
     try:
-        log.info(f"Generating content with {provider}/{model}...")
+        log.info(f"Generating content with {provider}/{model} (max_tokens={max_tokens})...")
         response = _request_with_retries("POST", url, json=payload, headers=headers, timeout=90)
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        resp_json = response.json()
+        choice = resp_json["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        content_text = choice["message"]["content"]
+        if finish_reason == "length":
+            log.warning(
+                f"تحذير: الرد اتقطع بسبب حد الطول (finish_reason=length) رغم "
+                f"max_tokens={max_tokens}. طول الرد المستلم: {len(content_text)} حرف. "
+                f"جرّب رفع LLM_MAX_TOKENS في الـ workflow."
+            )
+        else:
+            log.info(f"LLM finished normally (finish_reason={finish_reason}), response length: {len(content_text)} chars.")
+        return content_text
     except Exception as e:
         log.error(f"FATAL: فشل استدعاء نموذج التوليد ({type(e).__name__}): {e}")
         if response is not None:
@@ -417,6 +436,10 @@ def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
     data.setdefault("flashback", {}).setdefault("topic", pick_flashback_topic())
 
     if not _validate_content_shape(data):
+        log.error(
+            f"Raw LLM response length: {len(raw_response)} chars. "
+            f"Last 500 chars (لمعرفة هل الرد اتقطع في النهاية): ...{raw_response[-500:]}"
+        )
         return None, False
 
     log.info(f"Content generated successfully: {len(data.get('domain_updates', []))} domain updates.")
