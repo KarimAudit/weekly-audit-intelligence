@@ -111,24 +111,33 @@ def next_issue_number() -> int:
     except Exception:
         pass
     return n
-
 # ============================================================================
 # 2. مكتبة المصادر الموثوقة والمجالات
 # ============================================================================
 SOURCES = {
     "تدقيق داخلي وأداء (Internal / Performance Audit)": [
-        ("IIA", "https://www.theiia.org/"), ("INTOSAI", "https://www.intosai.org/"), ("GAO US", "https://www.gao.gov"),
+        ("IIA", "https://www.theiia.org/"), 
+        ("INTOSAI", "https://www.intosai.org/"), 
+        ("GAO US", "https://www.gao.gov"),
     ],
     "الحوكمة والقطاع العام (Governance / Public Sector)": [
-        ("OECD", "https://www.oecd.org/governance/"), ("World Bank", "https://www.worldbank.org/"),
+        ("OECD", "https://www.oecd.org/governance/"), 
+        ("World Bank", "https://www.worldbank.org/"),
     ],
     "الرقابة الداخلية وإدارة المخاطر (Internal Control / Risk / COSO)": [
-        ("COSO", "https://www.coso.org/"), ("IFAC", "https://www.ifac.org/"),
+        ("COSO", "https://www.coso.org/"), 
+        ("IFAC", "https://www.ifac.org/"),
     ],
-    "الموارد البشرية (HR)": [("SHRM", "https://www.shrm.org/")],
-    "المحاسبة الإدارية (Management Accounting)": [("IMA", "https://www.imanet.org/")],
+    "الموارد البشرية (HR)": [
+        ("SHRM", "https://www.shrm.org/")
+    ],
+    "المحاسبة الإدارية (Management Accounting)": [
+        ("IMA", "https://www.imanet.org/")
+    ],
     "استشارات وأفضل الممارسات (Big Four / Strategy Insights)": [
-        ("Deloitte", "https://www.deloitte.com/"), ("McKinsey", "https://www.mckinsey.com"), ("HBR", "https://hbr.org"),
+        ("Deloitte", "https://www.deloitte.com/"), 
+        ("McKinsey", "https://www.mckinsey.com"), 
+        ("HBR", "https://hbr.org"),
     ],
 }
 
@@ -146,7 +155,7 @@ DOMAINS = [
 FLASHBACK_TOPICS = [
     "إطار COSO للرقابة الداخلية (COSO Internal Control Framework)",
     "إدارة الموارد البشرية الاستراتيجية (Strategic HR Management)",
-    "المراقبة التسييرية (Contrôle de Gestion / Management Control)",
+    "المراقبة التسييرية (Management Control)",
     "إدارة الأداء المؤسسي (Performance Management)",
     "تطوير المواهب وتخطيط الإحلال الوظيفي (Talent Development & Succession Planning)",
     "المعايير المحاسبية الدولية (IPSAS / IFRS Essentials)",
