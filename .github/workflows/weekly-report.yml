@@ -12,9 +12,10 @@ jobs:
     permissions:
       contents: write
 
-    env:
+env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GEMINI_MODEL: gemini-3.5-flash
+      GEMINI_MODEL: gemini-3.6-flash
+      GEMINI_MODEL_FALLBACKS: "gemini-2.5-flash,gemini-3.1-flash-lite"
       SENDER_EMAIL: ${{ secrets.SMTP_USER }}
       SENDER_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       RECIPIENT_EMAILS: ${{ vars.RECIPIENT_EMAILS }}
