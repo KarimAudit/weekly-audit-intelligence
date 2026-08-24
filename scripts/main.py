@@ -1,81 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-============================================================================
 النشرة الأسبوعية للحوكمة والتدقيق الداخلي — Governance & Audit Weekly
-============================================================================
+
 Pipeline:
-  1) Gemini (with live Google Search grounding) researches this week's most
-     relevant developments across 8 professional domains, using a curated,
-     deep-researched list of authoritative sources, and returns strict
-     structured JSON.
-  2) A luxury-styled DOCX is built from that JSON (cover, executive
-     dashboard, quick wins, "management flashback", per-domain briefs with
-     real hyperlinks, further-reading / book picks).
-  3) DOCX -> PDF.
-  4) A matching luxury HTML email is generated and dispatched.
+  1) Gemini (بحث Google مباشر) يبحث ويكتب محتوى JSON منظم لثمانية مجالات.
+  2) بناء ملف Word فاخر التصميم من الـ JSON.
+  3) تحويل DOCX -> PDF.
+  4) بناء إيميل HTML مطابق وإرساله.
 
-  If step 1 fails for any reason, the pipeline STOPS (non-zero exit) and
-  does NOT send an email. A previous version emailed a "sorry, this failed"
-  placeholder to the real distribution list, which is worse than sending
-  nothing — that behaviour has been removed.
+  لو فشلت الخطوة 1 لأي سبب، يتوقف الـ pipeline (exit code != 0) ولا يُرسل
+  أي إيميل — لا نرسل محتوى بديل/اعتذار للقائمة الحقيقية.
 
-----------------------------------------------------------------------------
-REQUIRED ENVIRONMENT VARIABLES
-----------------------------------------------------------------------------
-  GEMINI_API_KEY  (or GOOGLE_API_KEY)   Google AI Studio API key
-  SENDER_EMAIL, SENDER_PASSWORD, RECIPIENT_EMAILS   SMTP credentials
+المتغيرات البيئية المطلوبة:
+  GEMINI_API_KEY (أو GOOGLE_API_KEY)
+  SENDER_EMAIL, SENDER_PASSWORD, RECIPIENT_EMAILS
 
-OPTIONAL:
-  GEMINI_MODEL            default "gemini-3.6-flash"
-  SMTP_SERVER, SMTP_PORT  default smtp.gmail.com / 465
+اختياري:
+  GEMINI_MODEL              افتراضي "gemini-3.6-flash"
+  GEMINI_MODEL_FALLBACKS    قائمة نماذج احتياطية مفصولة بفاصلة
+  SMTP_SERVER, SMTP_PORT    افتراضي smtp.gmail.com / 465
 
-----------------------------------------------------------------------------
-REQUIRED PYTHON PACKAGES (requirements.txt)
-----------------------------------------------------------------------------
-  google-genai          <- the CURRENT SDK. The old "google-generativeai"
-                            package reached end-of-life on 2025-11-30 and
-                            must not be used.
-  python-docx
-  python-dotenv          (optional, only for local .env loading)
-  docx2pdf                (optional — Windows/macOS only; on Linux CI the
-                            pipeline falls back to LibreOffice automatically)
+الحزم المطلوبة (requirements.txt): google-genai, python-docx,
+python-dotenv (اختياري), docx2pdf (اختياري، ويندوز/ماك فقط — على
+Linux CI يستخدم LibreOffice تلقائيًا).
 
-----------------------------------------------------------------------------
-REQUIRED SYSTEM PACKAGES ON THE CI RUNNER (GitHub Actions ubuntu-latest)
-----------------------------------------------------------------------------
-This is the fix for Arabic text rendering as tofu/question marks in the
-PDF: standard Ubuntu CI runners do NOT ship "Calibri" and do NOT ship any
-font with proper Arabic script shaping. Word/LibreOffice then silently
-substitute a fallback font that has no Arabic glyphs, which is exactly
-what produced the "?????" you saw. Add this step to the workflow BEFORE
-the step that runs this script:
-
-    - name: Install fonts + LibreOffice
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \\
-          libreoffice \\
-          fonts-hosny-amiri \\
-          fonts-crosextra-carlito
-
-  fonts-hosny-amiri    -> installs "Amiri", a classical, professionally
-                           designed Naskh Arabic typeface (used on 65,000+
-                           sites, served via Google Fonts) — this is the
-                           font this script now asks for explicitly.
-  fonts-crosextra-carlito -> installs "Carlito", the metric-compatible
-                           open-source clone of Calibri, for the Latin /
-                           English-technical-term portions of the text.
-
-At start-up this script checks (via `fc-list`) whether Amiri is actually
-installed and logs a loud, explicit warning — instead of silently
-producing broken PDFs again — if it is not.
-============================================================================
+خطوط عربية على CI: يجب تثبيت fonts-hosny-amiri و fonts-crosextra-carlito
+قبل تشغيل هذا السكربت (راجع ملف الـ workflow) وإلا يظهر النص كعلامات
+استفهام في الـ PDF.
 """
 
 import os
 import re
 import sys
 import json
+import time
 import logging
 import smtplib
 import subprocess
@@ -104,20 +62,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 log = logging.getLogger("newsletter")
 
 # ============================================================================
-# 1. BRAND / DESIGN SYSTEM
+# 1. نظام الألوان والخطوط
 # ============================================================================
-# A restrained "private-bank" palette: deep navy + warm gold on ivory.
-# (The previous palette had a bug: colours named NAVY/BLUE were actually
-#  magenta/pink hex values. Fixed here.)
-
-NAVY_DARK    = "0B1F3A"   # Cover / primary header fill
-NAVY_PRIMARY = "13294B"   # Section header fill
-GOLD_ACCENT  = "C9A227"   # Premium accent, rules, badges
-GOLD_LIGHT   = "E8D9A0"   # Subtle gold tint
-IVORY_BG     = "FBF9F4"   # Card / callout background
-HAIRLINE     = "D8D2C2"   # Thin borders
-TEXT_DARK    = "1C2430"   # Body text
-TEXT_MUTED   = "5B6472"   # Secondary text
+NAVY_DARK    = "0B1F3A"
+NAVY_PRIMARY = "13294B"
+GOLD_ACCENT  = "C9A227"
+GOLD_LIGHT   = "E8D9A0"
+IVORY_BG     = "FBF9F4"
+HAIRLINE     = "D8D2C2"
+TEXT_DARK    = "1C2430"
+TEXT_MUTED   = "5B6472"
 TEXT_WHITE   = "FFFFFF"
 
 RISK_COLORS = {
@@ -127,42 +81,32 @@ RISK_COLORS = {
     "منخفض": "1E6B3E",
 }
 
-# Two distinct fonts, deliberately: one for Arabic (complex-script) runs
-# and one for Latin (ascii) runs within the same paragraph. python-docx's
-# font.name only sets w:ascii — Word/LibreOffice then pick whatever their
-# *default* complex-script font is for the Arabic characters, which on a
-# bare Linux CI box has no Arabic glyphs at all. We set w:cs explicitly
-# instead of leaving it to chance. See the module docstring for the apt
-# packages that must be installed for these to actually be present.
-FONT_ARABIC = "Amiri"     # complex-script (w:cs) — classical Naskh, elegant
-FONT_LATIN = "Carlito"    # ascii (w:ascii) — open, metric-compatible Calibri
+# خط عربي (w:cs) وخط لاتيني (w:ascii) منفصلان لضمان ظهور الحروف العربية
+# بشكل صحيح على أنظمة Linux CI التي لا تملك خط عربي افتراضي.
+FONT_ARABIC = "Amiri"
+FONT_LATIN = "Carlito"
 
 ISSUE_NO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".issue_number")
 
 
 def verify_fonts_installed():
-    """Checks (via fontconfig) whether the fonts this document depends on
-    are actually present, and logs a loud, actionable warning if not —
-    so a broken-looking PDF is diagnosable instead of a silent surprise."""
+    """يتحقق عبر fontconfig من تثبيت الخطوط المطلوبة، ويسجل تحذيرًا واضحًا
+    إن لم تكن مثبتة بدل فشل صامت لاحقًا."""
     for font_name, apt_pkg in [(FONT_ARABIC, "fonts-hosny-amiri"), (FONT_LATIN, "fonts-crosextra-carlito")]:
         try:
             result = subprocess.run(["fc-list", f":family={font_name}"], capture_output=True, text=True, timeout=10)
             if not result.stdout.strip():
-                log.warning(
-                    f"⚠ Font '{font_name}' was NOT found by fontconfig on this machine. "
-                    f"Arabic/Latin text may render as missing glyphs or question marks. "
-                    f"Fix: sudo apt-get install -y {apt_pkg}"
-                )
+                log.warning(f"⚠ خط '{font_name}' غير مثبت. ثبّته عبر: sudo apt-get install -y {apt_pkg}")
             else:
                 log.info(f"Font check OK: '{font_name}' is installed.")
         except FileNotFoundError:
-            log.warning("fc-list not found — cannot verify font availability (fontconfig may be missing).")
+            log.warning("fc-list غير موجود — لا يمكن التحقق من الخطوط.")
         except Exception as e:
-            log.warning(f"Font check for '{font_name}' failed: {e}")
+            log.warning(f"فشل التحقق من خط '{font_name}': {e}")
 
 
 def next_issue_number() -> int:
-    """Persists and increments a simple issue counter across runs."""
+    """يحفظ ويزيد رقم العدد عبر التشغيلات المتتالية."""
     n = 1
     try:
         if os.path.exists(ISSUE_NO_FILE):
@@ -179,19 +123,14 @@ def next_issue_number() -> int:
 
 
 # ============================================================================
-# 2. CURATED SOURCE LIBRARY  (used to steer Gemini's grounded research)
+# 2. مكتبة المصادر الموثوقة (توجّه بحث Gemini)
 # ============================================================================
-# Base list = exactly what was supplied originally. Additions below are
-# marked "# added" and were individually verified by live web search
-# (not guessed) — each is a currently-live, authoritative body directly
-# relevant to one of the newsletter's 8 domains but missing from the
-# original sample list.
 SOURCES = {
     "تدقيق داخلي وأداء (Internal / Performance Audit)": [
         ("IIA - The Institute of Internal Auditors", "https://www.theiia.org/"),
         ("INTOSAI", "https://www.intosai.org/"),
-        ("ISSAI - INTOSAI Standards", "https://www.issai.org/"),               # added
-        ("ECIIA - European Confederation of Institutes of Internal Auditing", "https://www.eciia.eu/"),  # added
+        ("ISSAI - INTOSAI Standards", "https://www.issai.org/"),
+        ("ECIIA - European Confederation of Institutes of Internal Auditing", "https://www.eciia.eu/"),
         ("NAO UK", "https://www.nao.org.uk"),
         ("GAO US", "https://www.gao.gov"),
         ("AuditNet", "https://www.auditnet.org"),
@@ -203,23 +142,23 @@ SOURCES = {
         ("OECD Public Governance", "https://www.oecd.org/governance/"),
         ("World Bank Governance", "https://www.worldbank.org/"),
         ("LSE - London School of Economics", "https://www.lse.ac.uk"),
-        ("ICGN - International Corporate Governance Network", "https://www.icgn.org/"),  # added
-        ("Transparency International", "https://www.transparency.org/"),      # added
-        ("Ash Center for Democratic Governance, Harvard Kennedy School", "https://ash.harvard.edu/"),  # added
+        ("ICGN - International Corporate Governance Network", "https://www.icgn.org/"),
+        ("Transparency International", "https://www.transparency.org/"),
+        ("Ash Center for Democratic Governance, Harvard Kennedy School", "https://ash.harvard.edu/"),
     ],
     "الرقابة الداخلية وإدارة المخاطر (Internal Control / Risk / COSO)": [
         ("COSO", "https://www.coso.org/"),
         ("IFAC", "https://www.ifac.org/"),
         ("Protiviti", "https://www.protiviti.com"),
-        ("ISO 31000 - Risk Management", "https://www.iso.org/standards/popular/iso-31000-family"),  # added
-        ("GARP - Global Association of Risk Professionals", "https://www.garp.org/"),  # added
-        ("FERMA - Federation of European Risk Management Associations", "https://ferma.eu/"),  # added
+        ("ISO 31000 - Risk Management", "https://www.iso.org/standards/popular/iso-31000-family"),
+        ("GARP - Global Association of Risk Professionals", "https://www.garp.org/"),
+        ("FERMA - Federation of European Risk Management Associations", "https://ferma.eu/"),
     ],
-    "الموارد البشرية (HR)": [                                                  # added (new category)
+    "الموارد البشرية (HR)": [
         ("SHRM - Society for Human Resource Management", "https://www.shrm.org/"),
         ("CIPD - Chartered Institute of Personnel and Development", "https://www.cipd.org/"),
     ],
-    "المحاسبة الإدارية (Management Accounting)": [                              # added (new category)
+    "المحاسبة الإدارية (Management Accounting)": [
         ("IMA - Institute of Management Accountants", "https://www.imanet.org/"),
     ],
     "استشارات وأفضل الممارسات (Big Four / Strategy Insights)": [
@@ -243,7 +182,6 @@ DOMAINS = [
     "إصلاح وتحول القطاع العام (Public Sector Reform)",
 ]
 
-# Rotates weekly so the "flashback" never repeats two weeks running.
 FLASHBACK_TOPICS = [
     "إطار COSO للرقابة الداخلية (COSO Internal Control Framework)",
     "إدارة الموارد البشرية الاستراتيجية (Strategic HR Management)",
@@ -262,7 +200,7 @@ def pick_flashback_topic() -> str:
 
 
 # ============================================================================
-# 3. CONTENT GENERATION — Gemini with live Google Search grounding
+# 3. توليد المحتوى — Gemini مع بحث Google المباشر
 # ============================================================================
 RESPONSE_SCHEMA_HINT = """
 أعد النتيجة ككائن JSON صِرف واحد فقط (بدون أي نص قبله أو بعده، بدون Markdown fences)
@@ -306,7 +244,7 @@ RESPONSE_SCHEMA_HINT = """
 }
 
 قواعد إلزامية:
-- اكتب المحتوى بالعربية الفصحى الاحترافية، وضع كل مصطلح تقني بالإنجليزية بين قوسين عند أول ورود له، مثال: «معايير الأداء (Performance Standards)».
+- اكتب المحتوى بالعربية الفصحى الاحترافية، وضع كل مصطلح تقني بالإنجليزية بين قوسين عند أول ورود له.
 - استخدم فقط أخبارًا وتطورات حقيقية وحديثة (لا تختلق حقائق)، واستشهد بروابط قابلة للفتح فعليًا من نتائج البحث.
 - لا تكرر نفس الخبر في أكثر من مجال.
 - اجعل اللهجة عملية ومباشرة (hands-on)، بلا حشو إنشائي.
@@ -341,7 +279,7 @@ def build_research_prompt() -> str:
 
 
 def _extract_json(text: str) -> Optional[dict]:
-    """Gemini sometimes wraps JSON in ```json fences despite instructions."""
+    """Gemini أحيانًا يضع JSON داخل ```json رغم التعليمات."""
     if not text:
         return None
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE)
@@ -354,49 +292,14 @@ def _extract_json(text: str) -> Optional[dict]:
         return None
 
 
-def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
-    """Calls Gemini (grounded with live Google Search) to research and draft
-    this week's issue.
-
-    Returns (content, success). On ANY failure, success=False and content is
-    None — the caller (run_pipeline) must NOT proceed to build/send a
-    newsletter in that case. We deliberately do not silently substitute
-    placeholder content here any more: a previous version did that and the
-    placeholder text ended up being emailed to the real distribution list,
-    which is a worse outcome than the run simply failing loudly.
-    """
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-
-    if not api_key:
-        log.error(
-            "FATAL: neither GEMINI_API_KEY nor GOOGLE_API_KEY is set in the environment. "
-            "Set one of them as a GitHub Actions secret and expose it to this job's env block."
-        )
-        return None, False
-
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError as e:
-        log.error(
-            f"FATAL: could not import the 'google-genai' package ({e}). "
-            "It is very likely missing from requirements.txt (or the old, "
-            "end-of-life 'google-generativeai' package is installed instead). "
-            "Fix: add 'google-genai' to requirements.txt and re-run "
-            "`pip install -r requirements.txt`."
-        )
-        return None, False
-
 def _is_quota_or_rate_error(exc: Exception) -> bool:
     msg = str(exc)
     return "RESOURCE_EXHAUSTED" in msg or " 429" in msg or "'code': 429" in msg
 
 
 def _call_gemini_with_fallback(client, types, prompt: str, primary_model: str):
-    """يجرّب الموديل الأساسي، وعند 429/quota ينتظر قليلاً (لاحتمال أنه
-    حد دقيقة عابر) ثم يعيد المحاولة مرة، وإن استمر الفشل ينتقل لموديل
-    احتياطي بدل إيقاف الـ pipeline بالكامل."""
+    """يجرّب الموديل الأساسي، وعند 429/quota ينتظر ثم يعيد المحاولة مرة،
+    وإن استمر الفشل ينتقل لموديل احتياطي بدل إيقاف الـ pipeline بالكامل."""
     fallbacks = [
         m.strip() for m in os.getenv(
             "GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash,gemini-3.1-flash-lite"
@@ -429,35 +332,49 @@ def _call_gemini_with_fallback(client, types, prompt: str, primary_model: str):
     raise last_error
 
 
+def generate_newsletter_content() -> Tuple[Optional[Dict[str, Any]], bool]:
+    """يستدعي Gemini (مع بحث Google المباشر) لبحث وصياغة عدد هذا الأسبوع.
+
+    يُرجع (content, success). عند أي فشل: success=False و content=None —
+    لا نرسل محتوى بديل/اعتذار للقائمة الحقيقية عند الفشل."""
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+    if not api_key:
+        log.error("FATAL: لم يتم ضبط GEMINI_API_KEY أو GOOGLE_API_KEY في البيئة.")
+        return None, False
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError as e:
+        log.error(
+            f"FATAL: تعذر استيراد حزمة 'google-genai' ({e}). "
+            "تأكد من وجودها في requirements.txt (وليس الحزمة القديمة google-generativeai)."
+        )
+        return None, False
+
     try:
         client = genai.Client(api_key=api_key)
         response, used_model = _call_gemini_with_fallback(client, types, build_research_prompt(), model_name)
         log.info(f"Content generated successfully using model: {used_model}")
     except Exception as e:
         log.error(
-            f"FATAL: the Gemini API call failed on every model tried "
-            f"({type(e).__name__}: {e}). Common causes: invalid/expired API key, "
-            f"the API key's project has no billing/quota enabled, or none of the "
-            f"model names have available quota. Check https://aistudio.google.com/app/apikey "
-            f"and https://ai.dev/rate-limit for project status.",
+            f"FATAL: فشل استدعاء Gemini على كل النماذج المجربة ({type(e).__name__}: {e}). "
+            "الأسباب الشائعة: مفتاح API غير صالح، المشروع بلا حصة/فوترة مفعّلة، "
+            "أو لا حصة متاحة على أي من النماذج. راجع "
+            "https://aistudio.google.com/app/apikey و https://ai.dev/rate-limit",
             exc_info=True,
         )
         return None, False
 
     if not getattr(response, "text", None):
-        log.error(
-            "FATAL: Gemini returned an empty response (no text). This usually means the "
-            "prompt was blocked by a safety filter, or the model returned only a "
-            "function/tool call. Inspect response.candidates in a local debug run."
-        )
+        log.error("FATAL: Gemini أرجع استجابة فارغة (بلا نص) — قد يكون بسبب فلتر أمان أو استدعاء أداة فقط.")
         return None, False
 
     data = _extract_json(response.text)
     if not data:
-        log.error(
-            "FATAL: Gemini's response could not be parsed as JSON. Raw response has been "
-            "logged below for debugging — check for extra prose around the JSON object."
-        )
+        log.error("FATAL: تعذر تحليل استجابة Gemini كـ JSON.")
         log.error(f"Raw Gemini response (first 2000 chars): {response.text[:2000]}")
         return None, False
 
@@ -467,22 +384,18 @@ def _call_gemini_with_fallback(client, types, prompt: str, primary_model: str):
 
 
 # ============================================================================
-# 4. DOCX HELPERS
+# 4. أدوات DOCX
 # ============================================================================
 def set_rtl(paragraph):
-    """Marks a paragraph as right-to-left / bidirectional so Word renders
-    Arabic runs correctly regardless of alignment."""
+    """يجعل الفقرة RTL لضمان عرض صحيح للنص العربي."""
     pPr = paragraph._p.get_or_add_pPr()
     bidi = OxmlElement("w:bidi")
     pPr.append(bidi)
 
 
 def style_run(run, size=11, bold=False, color=TEXT_DARK, italic=False):
-    """Applies size/weight/colour, and — critically — sets DIFFERENT fonts
-    for the Latin (w:ascii) and Arabic/complex-script (w:cs) glyph ranges
-    within the same run, so mixed Arabic + English-technical-term text
-    renders correctly instead of falling back to a font with no Arabic
-    glyphs (the cause of the "?????" rendering bug)."""
+    """يضبط الحجم/الوزن/اللون، ويحدد خطًا مختلفًا للأحرف اللاتينية (w:ascii)
+    وأخرى عربية (w:cs) ضمن نفس الـ run لتفادي ظهور علامات استفهام."""
     run.font.size = Pt(size)
     run.font.bold = bold
     run.font.italic = italic
@@ -501,7 +414,7 @@ def style_run(run, size=11, bold=False, color=TEXT_DARK, italic=False):
 
 
 def add_hyperlink(paragraph, text, url, color=GOLD_ACCENT, underline=True, size=10.5, bold=False):
-    """Inserts a real, clickable hyperlink run into a docx paragraph."""
+    """يضيف رابطًا حقيقيًا قابلاً للنقر داخل فقرة docx."""
     part = paragraph.part
     r_id = part.relate_to(
         url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
@@ -578,7 +491,7 @@ def add_gold_rule(doc, space_before=2, space_after=10):
 
 
 # ============================================================================
-# 5. DOCX BUILD
+# 5. بناء DOCX
 # ============================================================================
 def add_cover_page(doc, content: Dict[str, Any], issue_no: int):
     tbl = doc.add_table(rows=1, cols=1)
@@ -889,7 +802,7 @@ def build_word_document(content: Dict[str, Any], reports_dir: str = "reports") -
 
 
 # ============================================================================
-# 6. PDF CONVERSION
+# 6. تحويل PDF
 # ============================================================================
 def convert_docx_to_pdf(docx_path: str) -> str:
     pdf_path = docx_path.rsplit(".", 1)[0] + ".pdf"
@@ -914,7 +827,7 @@ def convert_docx_to_pdf(docx_path: str) -> str:
 
 
 # ============================================================================
-# 7. HTML EMAIL (mirrors the DOCX design language)
+# 7. إيميل HTML (نفس هوية تصميم الـ DOCX)
 # ============================================================================
 def _html_escape(s: str) -> str:
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -1031,7 +944,7 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
 
 
 # ============================================================================
-# 8. EMAIL DISPATCH
+# 8. إرسال الإيميل
 # ============================================================================
 def send_email_report(html_content: str, report_filepath: str, issue_theme: str, issue_no: int):
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -1042,14 +955,12 @@ def send_email_report(html_content: str, report_filepath: str, issue_theme: str,
     recipient_emails = [e.strip() for e in recipient_raw.split(",") if e.strip()]
 
     if not sender_email or not sender_password or not recipient_emails:
-        log.error("CRITICAL: SMTP credentials missing (SENDER_EMAIL / SENDER_PASSWORD / RECIPIENT_EMAILS).")
+        log.error("CRITICAL: بيانات SMTP ناقصة (SENDER_EMAIL / SENDER_PASSWORD / RECIPIENT_EMAILS).")
         raise ValueError("Missing required SMTP environment variables.")
 
     msg = MIMEMultipart("mixed")
     subject_text = f"العدد {issue_no} | {issue_theme} — {datetime.now().strftime('%Y-%m-%d')}"
-    # Explicit RFC 2047 header encoding: without this, some mail transfer
-    # agents mangle non-ASCII Subject headers (a classic cause of Arabic
-    # text turning into "?" specifically in the subject line).
+    # ترميز RFC 2047 صريح لتفادي تلف الحروف العربية في عنوان الإيميل.
     msg["Subject"] = Header(subject_text, "utf-8")
     msg["From"] = sender_email
     msg["To"] = ", ".join(recipient_emails)
@@ -1083,7 +994,7 @@ def send_email_report(html_content: str, report_filepath: str, issue_theme: str,
 
 
 # ============================================================================
-# 9. PIPELINE
+# 9. الـ Pipeline
 # ============================================================================
 def run_pipeline():
     log.info("Step 0/4 — Verifying required fonts are installed...")
@@ -1092,10 +1003,7 @@ def run_pipeline():
     log.info("Step 1/4 — Researching & drafting content with Gemini (grounded search)...")
     content, ok = generate_newsletter_content()
     if not ok:
-        log.error(
-            "Pipeline STOPPED before building or sending anything. "
-            "See the FATAL log line above for the exact cause. No email was sent."
-        )
+        log.error("Pipeline STOPPED before building or sending anything. No email was sent.")
         sys.exit(1)
 
     log.info("Step 2/4 — Building luxury Word document...")
