@@ -1621,4 +1621,167 @@ def generate_email_html(content: Dict[str, Any], issue_no: int) -> str:
                 <div style="font-weight:bold; color:#13294B; font-size:13.5px; margin-bottom:6px;">{_html_escape(block.get('title',''))}</div>
                 <p style="color:#1C2430; font-size:13.5px; line-height:1.7; margin:0 0 10px 0;">{_html_escape(block.get('summary',''))}</p>
                 <div style="background:#FBF9F4; border-right:3px solid #C9A227; padding:10px 14px; border-radius:4px;">
-                    <div style="margin-bottom:6px;"><strong style="color:#13294B; font-
+                    <div style="margin-bottom:6px;"><strong style="color:#13294B; font-size:12.5px;">إجراءات:</strong>
+                    <span style="color:#334155; font-size:12.5px;"> {_html_escape(block.get('recommended_actions',''))}</span></div>
+                </div>
+                {audience_html}
+                <div style="margin-top:10px;">{source_html}</div>
+            </div>
+        </div>"""
+
+    # مسار الاحتراف + لحظة توازن
+    growth = content.get("growth_corner", {})
+    wellbeing = content.get("wellbeing_corner", {})
+    growth_wellbeing_html = ""
+    if growth and growth.get("insight_ar"):
+        growth_wellbeing_html += f"""
+        <div style="background:#ffffff; border:1px solid #D8D2C2; border-right:4px solid #13294B; border-radius:8px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+            <div style="color:#13294B; font-weight:bold; font-size:13px; margin-bottom:6px;">مسار الاحتراف — كيف يفكّر الكبار</div>
+            <p style="color:#1C2430; font-size:13px; line-height:1.6; margin:0 0 8px 0;">{_html_escape(growth.get('insight_ar',''))}</p>
+            <p style="color:#5B6472; font-size:12px; font-style:italic; margin:0;"><strong>كيف تطبّقها هذا الأسبوع:</strong> {_html_escape(growth.get('how_to_apply_ar',''))}</p>
+        </div>"""
+    if wellbeing and wellbeing.get("tip_ar"):
+        growth_wellbeing_html += f"""
+        <div style="background:#FBF9F4; border-radius:8px; padding:14px 18px; margin-bottom:22px; text-align:right;">
+            <div style="color:#13294B; font-weight:bold; font-size:13px; margin-bottom:6px;">لحظة توازن</div>
+            <p style="color:#1C2430; font-size:12.5px; line-height:1.6; margin:0; font-style:italic;">{_html_escape(wellbeing.get('tip_ar',''))}</p>
+        </div>"""
+
+    reading_html = ""
+    for it in content.get("further_reading", []):
+        link = f'<a href="{it.get("url","#")}" style="color:#13294B; font-weight:bold; text-decoration:none;">{_html_escape(it.get("title",""))}</a>'
+        reading_html += f'<li style="margin-bottom:8px; color:#1C2430; font-size:13px;"><span style="color:#5B6472;">{_html_escape(it.get("type","مقال"))} — </span>{link}<span style="color:#5B6472; font-size:12px;"> ({_html_escape(it.get("source_name",""))})</span></li>'
+
+    book = content.get("book_of_week", {})
+    book_html = ""
+    if book and book.get("title"):
+        book_html = f"""
+        <div style="border-top:1px solid #D8D2C2; margin-top:14px; padding-top:14px;">
+            <div style="color:#13294B; font-weight:bold; font-size:13.5px;">كتاب الأسبوع: {_html_escape(book['title'])} — {_html_escape(book.get('author',''))}</div>
+            <p style="color:#5B6472; font-size:12.5px; font-style:italic; margin:6px 0 0 0;">{_html_escape(book.get('why_ar',''))}</p>
+        </div>"""
+
+    return f"""<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="background:#F1EFE8; margin:0; padding:20px; font-family:Calibri, Tahoma, sans-serif;">
+  <div style="max-width:680px; margin:0 auto;">
+    <div style="background:linear-gradient(135deg, #0B1F3A 0%, #13294B 100%); padding:30px 20px; border-radius:10px 10px 0 0; text-align:center;">
+      <div style="color:#E8D9A0; font-size:12px; letter-spacing:1px; margin-bottom:6px;">العدد {issue_no} • {datetime.now().strftime('%Y-%m-%d')}</div>
+      <h1 style="color:#ffffff; margin:0; font-size:21px;">النشرة الأسبوعية للحوكمة والتدقيق الداخلي</h1>
+      <div style="color:#C9A227; margin-top:8px; font-size:14px; font-style:italic;">{_html_escape(content.get('issue_theme',''))}</div>
+    </div>
+
+    <div style="background:#ffffff; padding:18px 22px; text-align:right;">
+      <p style="color:#5B6472; font-size:13.5px; line-height:1.7; margin:0; font-style:italic;">{_html_escape(content.get('editor_note',''))}</p>
+    </div>
+
+    <div style="padding:20px 0 0 0;">
+      <div style="text-align:right;">{exec_brief_html}</div>
+      <div style="text-align:right;">{stat_html}</div>
+
+      {f'<div style="text-align:right;"><div style="color:#13294B; font-weight:bold; font-size:15px; margin-bottom:14px; border-bottom:2px solid #C9A227; padding-bottom:6px;">رادار المعايير والإصدارات الجديدة</div>{standards_html}</div>' if standards_html else ''}
+
+      <div style="text-align:right;">{skills_html}</div>
+      <div style="text-align:right;">{flashback_html}</div>
+      <div style="text-align:right;">{term_html}</div>
+
+      <div style="text-align:right;">
+        <div style="color:#13294B; font-weight:bold; font-size:15px; margin-bottom:14px; border-bottom:2px solid #C9A227; padding-bottom:6px;">أبرز التطورات حسب المجال</div>
+        {cards_html}
+      </div>
+
+      <div style="text-align:right;">{growth_wellbeing_html}</div>
+
+      <div style="background:#ffffff; border:1px solid #D8D2C2; border-radius:10px; padding:18px 20px; text-align:right;">
+        <div style="color:#13294B; font-weight:bold; font-size:14px; margin-bottom:10px;">للقراءة هذا الأسبوع</div>
+        <ul style="margin:0; padding-right:18px;">{reading_html}</ul>
+        {book_html}
+      </div>
+    </div>
+
+    <div style="text-align:center; padding:18px; font-size:11px; color:#5B6472; border-top:1px solid #D8D2C2; margin-top:10px;">
+      نشرة داخلية سرية — مُعدّة عبر نظام رصد الرؤى الحوكمية والتدقيقية.<br>
+      جميع الحقوق محفوظة © {datetime.now().year}
+    </div>
+  </div>
+</body>
+</html>"""
+
+# ============================================================================
+# 9. إرسال الإيميل (بلا تغيير)
+# ============================================================================
+def send_email_report(html_content: str, report_filepath: str, issue_theme: str, issue_no: int):
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 465))
+    sender_email = os.getenv("SENDER_EMAIL")
+    sender_password = os.getenv("SENDER_PASSWORD")
+    recipient_raw = os.getenv("RECIPIENT_EMAILS", "")
+    recipient_emails = [e.strip() for e in recipient_raw.split(",") if e.strip()]
+
+    if not sender_email or not sender_password or not recipient_emails:
+        log.error("CRITICAL: بيانات SMTP ناقصة (SENDER_EMAIL / SENDER_PASSWORD / RECIPIENT_EMAILS).")
+        raise ValueError("Missing required SMTP environment variables.")
+
+    msg = MIMEMultipart("mixed")
+    subject_text = f"العدد {issue_no} | {issue_theme} — {datetime.now().strftime('%Y-%m-%d')}"
+    msg["Subject"] = Header(subject_text, "utf-8")
+    msg["From"] = sender_email
+    msg["To"] = ", ".join(recipient_emails)
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    if os.path.exists(report_filepath):
+        subtype = "pdf" if report_filepath.endswith(".pdf") else "vnd.openxmlformats-officedocument.wordprocessingml.document"
+        with open(report_filepath, "rb") as f:
+            attachment = MIMEApplication(f.read(), _subtype=subtype)
+            attachment.add_header("Content-Disposition", "attachment", filename=os.path.basename(report_filepath))
+            msg.attach(attachment)
+            log.info(f"Attached: {os.path.basename(report_filepath)}")
+    else:
+        log.warning(f"Report file missing: {report_filepath}")
+
+    try:
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, recipient_emails, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, recipient_emails, msg.as_string())
+        log.info(f"Newsletter dispatched to {len(recipient_emails)} recipient(s).")
+    except Exception as e:
+        log.error(f"Failed to dispatch email: {e}", exc_info=True)
+        raise
+
+# ============================================================================
+# 10. الـ Pipeline
+# ============================================================================
+def run_pipeline():
+    log.info("Step 0/4 — Verifying required fonts are installed...")
+    verify_fonts_installed()
+
+    log.info("Step 1/4 — Researching with Tavily & drafting the time-sensitive content with LLM...")
+    content, ok = generate_newsletter_content()
+    if not ok:
+        log.error("Pipeline STOPPED before building or sending anything. No email was sent.")
+        sys.exit(1)
+
+    log.info("Step 2/4 — Building luxury Word document...")
+    docx_filepath = build_word_document(content, reports_dir="reports")
+    issue_no = int(re.search(r"Issue(\d+)", docx_filepath).group(1))
+
+    log.info("Step 3/4 — Converting to PDF...")
+    report_filepath = convert_docx_to_pdf(docx_filepath)
+
+    log.info("Step 4/4 — Building HTML email and dispatching...")
+    email_html = generate_email_html(content, issue_no)
+    with open("email_preview.html", "w", encoding="utf-8") as f:
+        f.write(email_html)
+
+    send_email_report(email_html, report_filepath, content.get("issue_theme", "النشرة الأسبوعية"), issue_no)
+    log.info("Pipeline complete.")
+
+if __name__ == "__main__":
+    run_pipeline()-
