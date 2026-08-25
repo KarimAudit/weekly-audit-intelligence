@@ -1784,4 +1784,4 @@ def run_pipeline():
     log.info("Pipeline complete.")
 
 if __name__ == "__main__":
-    run_pipeline()-
+    run_pipeline()
