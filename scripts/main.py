@@ -978,7 +978,7 @@ def send_email_report(html_content: str, report_filepath: str, issue_theme: str,
 
     msg = MIMEMultipart("mixed")
     msg["Subject"] = Header(f"العدد {issue_no} | {issue_theme} — {datetime.now().strftime('%Y-%m-%d')}", "utf-8")
-    msg["From"], msg["To"] = sender_email, ", ".join(recipient_emails)
+    msg["From"], msg["To"] = sender_email
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     if os.path.exists(report_filepath):
